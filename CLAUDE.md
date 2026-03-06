@@ -40,10 +40,11 @@ content/
 
 ## Content Rules
 
-- **Folders = categories.** Only top-level folders are shown as categories.
+- **Folders = categories.** Only top-level folders are shown as categories. Empty folders appear in the index with a placeholder row.
 - **`.html` files only** are linked in the index. All other file types are silently ignored by the generator.
 - **Images and assets** (`.png`, `.jpg`, `.gif`, `.svg`, `.webp`, `.ico`, `.css`, `.js`, etc.) can be placed freely inside category folders. They are served by Nginx and can be referenced from HTML files using relative paths (e.g. `<img src="logo.png">`), but they never appear as index entries.
 - **Filename humanization:** `my-report-2025.html` → "My Report 2025". Hyphens and underscores become spaces, title-cased.
+- **`_`-prefixed HTML files** (e.g. `_example.html`) are "example" placeholders: shown in the index only while no regular HTML files exist in the folder. Hidden automatically once real content is added. Still served by Nginx if linked directly.
 - **`meta.json` in a folder** (optional): `{ "title": "Custom Name", "order": 1, "hidden": false }`
 - Files at the content root (other than `index.html`) are not shown in the index.
 - Subdirectories deeper than one level are ignored.

@@ -112,24 +112,34 @@ def build_context(content_dir: Path, site_title: str) -> dict:
         if meta.get("hidden", False):
             continue
 
-        pages = []
+        pages: list[dict] = []
+        example_pages: list[dict] = []
         for f in sorted(folder.iterdir()):
             if f.suffix.lower() != HTML_SUFFIX:
                 continue  # skip images, assets, meta.json, etc.
 
             rel_path = f"{folder.name}/{f.name}"
             stat = f.stat()
-            pages.append(
-                {
-                    # Prefer <title> tag; fall back to humanized filename
-                    "title": extract_title(f) or humanize(f.stem),
-                    "path": rel_path,
-                    "modified": datetime.fromtimestamp(stat.st_mtime).strftime(
-                        "%Y-%m-%d"
-                    ),
-                    "shortlink": path_to_code.get(rel_path),
-                }
-            )
+            entry = {
+                # Prefer <title> tag; fall back to humanized filename.
+                # Strip leading underscores from stem before humanizing so
+                # that _example.html renders as "Example", not " Example".
+                "title": extract_title(f) or humanize(f.stem.lstrip("_")),
+                "path": rel_path,
+                "modified": datetime.fromtimestamp(stat.st_mtime).strftime(
+                    "%Y-%m-%d"
+                ),
+                "shortlink": path_to_code.get(rel_path),
+            }
+            if f.name.startswith("_"):
+                example_pages.append(entry)
+            else:
+                pages.append(entry)
+
+        # Files prefixed with _ are "example" placeholders: visible only when
+        # the folder has no real pages; hidden the moment real content arrives.
+        if not pages:
+            pages = example_pages
 
         categories.append(
             {

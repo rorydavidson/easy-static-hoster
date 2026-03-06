@@ -57,6 +57,8 @@ The index updates automatically within ~2 seconds. No restart needed.
 
 **Empty categories** are shown on the index immediately with a *"No pages yet"* placeholder. Upload a file or add one directly to make the placeholder disappear.
 
+**Example / placeholder files** — any HTML file whose name begins with `_` (e.g. `_example.html`, `_getting-started.html`) is treated as a placeholder. It appears in the index only while the folder has no other HTML files. The moment a real page is added the `_` file disappears from the index automatically, though it is still served by nginx if linked to directly.
+
 ---
 
 ## Short links
