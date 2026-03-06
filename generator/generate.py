@@ -131,9 +131,6 @@ def build_context(content_dir: Path, site_title: str) -> dict:
                 }
             )
 
-        if not pages:
-            continue
-
         categories.append(
             {
                 "title": meta.get("title", humanize(folder.name)),

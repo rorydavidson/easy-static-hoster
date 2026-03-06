@@ -41,6 +41,10 @@
       color: #fff;
       padding: 2.25rem 3rem 2rem;
       border-bottom: 1px solid var(--header-line);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
     }
 
     .site-name {
@@ -278,6 +282,30 @@
       min-height: 1.1em;
     }
 
+    /* ── New category button (header) ───────────────────────── */
+    .new-cat-btn {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.55);
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 6px;
+      padding: 0.35rem 0.75rem;
+      cursor: pointer;
+      transition: color 0.12s, background 0.12s, border-color 0.12s;
+      margin-top: 0.2rem;
+    }
+
+    .new-cat-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.13);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
     /* ── Upload button ───────────────────────────────────────── */
     .upload-btn {
       margin-left: auto;
@@ -408,6 +436,22 @@
 
     .cred-cancel:hover { background: var(--bg); }
 
+    /* ── Empty category ──────────────────────────────────────── */
+    .cat-empty {
+      padding: 0.85rem 1.25rem;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    /* ── Mkdir modal error ───────────────────────────────────── */
+    .mkdir-error {
+      margin-top: 0.5rem;
+      font-size: 0.72rem;
+      color: var(--danger);
+      min-height: 1.1em;
+    }
+
     /* ── Empty state ─────────────────────────────────────────── */
     .empty {
       text-align: center;
@@ -430,12 +474,20 @@
 <body>
 
   <header>
-    <div class="site-name">{{ site_title }}</div>
-    <div class="header-stats">
-      <span>{{ categories | length }} categor{{ "y" if categories | length == 1 else "ies" }}</span>
-      <span class="sep">&middot;</span>
-      <span>{{ total_pages }} page{{ "" if total_pages == 1 else "s" }}</span>
+    <div>
+      <div class="site-name">{{ site_title }}</div>
+      <div class="header-stats">
+        <span>{{ categories | length }} categor{{ "y" if categories | length == 1 else "ies" }}</span>
+        <span class="sep">&middot;</span>
+        <span>{{ total_pages }} page{{ "" if total_pages == 1 else "s" }}</span>
+      </div>
     </div>
+    {% if upload_enabled %}
+    <button type="button" class="new-cat-btn" onclick="triggerMkdir()">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New category
+    </button>
+    {% endif %}
   </header>
 
   <main>
@@ -460,6 +512,7 @@
         {% endif %}
       </div>
       <div class="page-list">
+        {% if cat.pages %}
         {% for page in cat.pages %}
         <div class="page-item">
           <a class="page-name" href="{{ page.path }}" title="{{ page.title }}">{{ page.title }}</a>
@@ -479,6 +532,9 @@
           <span class="page-date">{{ page.modified }}</span>
         </div>
         {% endfor %}
+        {% else %}
+        <div class="cat-empty">No pages yet — upload an HTML file to get started.</div>
+        {% endif %}
       </div>
     </section>
     {% endfor %}
@@ -506,6 +562,30 @@
       <div class="cred-actions">
         <button type="button" class="cred-confirm" onclick="credConfirm()">Continue</button>
         <button type="button" class="cred-cancel" onclick="credCancel()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New category modal — all fields in one step -->
+  <div id="mkdir-modal" class="cred-modal hidden" role="dialog" aria-modal="true" aria-label="New category">
+    <div class="cred-dialog">
+      <div class="cred-title">New category</div>
+      <div class="cred-field">
+        <label for="mkdir-name">Category name</label>
+        <input id="mkdir-name" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. reports">
+      </div>
+      <div class="cred-field">
+        <label for="mkdir-user">Username</label>
+        <input id="mkdir-user" type="text" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="cred-field">
+        <label for="mkdir-pass">Password</label>
+        <input id="mkdir-pass" type="password" autocomplete="new-password">
+      </div>
+      <div class="mkdir-error" id="mkdir-error" aria-live="polite"></div>
+      <div class="cred-actions">
+        <button type="button" class="cred-confirm" onclick="mkdirConfirm()">Create</button>
+        <button type="button" class="cred-cancel" onclick="mkdirCancel()">Cancel</button>
       </div>
     </div>
   </div>
@@ -572,6 +652,57 @@
     function credCancel() {
       _uploadFolder = null;
       document.getElementById('cred-modal').classList.add('hidden');
+    }
+
+    /* ── New category ────────────────────────────────────────── */
+    function triggerMkdir() {
+      document.getElementById('mkdir-name').value = '';
+      document.getElementById('mkdir-user').value = '';
+      document.getElementById('mkdir-pass').value = '';
+      document.getElementById('mkdir-error').textContent = '';
+      document.getElementById('mkdir-modal').classList.remove('hidden');
+      document.getElementById('mkdir-name').focus();
+    }
+
+    function mkdirConfirm() {
+      var name  = document.getElementById('mkdir-name').value.trim();
+      var user  = document.getElementById('mkdir-user').value.trim();
+      var pass  = document.getElementById('mkdir-pass').value;
+      var errEl = document.getElementById('mkdir-error');
+      if (!name)        { errEl.textContent = 'Category name is required'; return; }
+      if (!user || !pass) { errEl.textContent = 'Credentials are required'; return; }
+      var creds;
+      try {
+        creds = btoa(user + ':' + pass);
+      } catch (err) {
+        errEl.textContent = 'Credentials must only contain ASCII characters';
+        return;
+      }
+      errEl.textContent = '';
+      fetch('/api/mkdir', {
+        method: 'POST',
+        headers: {
+          'X-Folder':      encodeURIComponent(name),
+          'Authorization': 'Basic ' + creds,
+        },
+      })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          errEl.textContent = res.data.error || 'Failed to create category';
+        } else {
+          document.getElementById('mkdir-modal').classList.add('hidden');
+          _showUploadToast('\u201c' + name + '\u201d created \u2014 refreshing\u2026', 'ok');
+          setTimeout(function () { location.reload(); }, 1500);
+        }
+      })
+      .catch(function () {
+        errEl.textContent = 'Network error';
+      });
+    }
+
+    function mkdirCancel() {
+      document.getElementById('mkdir-modal').classList.add('hidden');
     }
 
     function _doUpload(folder, file, creds) {
@@ -731,11 +862,13 @@
     });
 
     document.addEventListener('keydown', function (e) {
-      var credOpen = !document.getElementById('cred-modal').classList.contains('hidden');
-      if (e.key === 'Escape') { closeEditor(); credCancel(); }
+      var credOpen  = !document.getElementById('cred-modal').classList.contains('hidden');
+      var mkdirOpen = !document.getElementById('mkdir-modal').classList.contains('hidden');
+      if (e.key === 'Escape') { closeEditor(); credCancel(); mkdirCancel(); }
       if (e.key === 'Enter') {
-        if (credOpen) { e.preventDefault(); credConfirm(); }
-        else if (_activeBtn) { e.preventDefault(); saveShortlink(); }
+        if (credOpen)       { e.preventDefault(); credConfirm(); }
+        else if (mkdirOpen) { e.preventDefault(); mkdirConfirm(); }
+        else if (_activeBtn){ e.preventDefault(); saveShortlink(); }
       }
     });
   </script>

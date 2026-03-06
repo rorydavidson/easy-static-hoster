@@ -181,6 +181,39 @@ def handle_upload():
     return jsonify({"ok": True, "filename": filename, "folder": folder})
 
 
+@app.route('/api/mkdir', methods=['POST'])
+def handle_mkdir():
+    if not _UPLOAD_ENABLED:
+        return jsonify({"error": "not available"}), 403
+
+    if not _check_upload_auth():
+        return jsonify({"error": "invalid credentials"}), 401
+
+    raw_name = unquote(request.headers.get("X-Folder", "").strip())
+    folder_name = os.path.basename(raw_name)   # strip any path components
+    if not folder_name or folder_name.startswith(".") or len(folder_name) > 100:
+        return jsonify({"error": "invalid category name"}), 400
+
+    folder_path = CONTENT_DIR / folder_name
+    try:
+        if not folder_path.resolve().as_posix().startswith(CONTENT_DIR.resolve().as_posix()):
+            return jsonify({"error": "invalid category name"}), 400
+    except Exception:
+        return jsonify({"error": "invalid category name"}), 400
+
+    if folder_path.exists():
+        return jsonify({"error": f"'{folder_name}' already exists"}), 409
+
+    try:
+        folder_path.mkdir(parents=False, exist_ok=False)
+    except Exception as exc:
+        log.error("mkdir failed: %s", exc)
+        return jsonify({"error": "failed to create category"}), 500
+
+    log.info("Created category: %s/", folder_name)
+    return jsonify({"ok": True, "folder": folder_name})
+
+
 def start(content_dir: Path | None = None) -> None:
     global CONTENT_DIR
     if content_dir is not None:

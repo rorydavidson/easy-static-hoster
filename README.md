@@ -13,7 +13,7 @@ Two Docker containers share a content directory on your host machine:
 - **generator** — watches the content directory and rebuilds `index.html` whenever files change
 - **nginx** — serves the index and all static files (HTML, images, CSS, etc.)
 
-The index groups pages by top-level folder (each folder = one category) and shows the last-modified date beside each page name.
+The index groups pages by top-level folder (each folder = one category) and shows the last-modified date beside each page name. Empty categories appear in the index immediately with a placeholder row — no file required.
 
 ---
 
@@ -54,6 +54,8 @@ content/
 The index updates automatically within ~2 seconds. No restart needed.
 
 **Page titles** are read from the HTML `<title>` tag inside each file. If no `<title>` is found, the filename is humanised as a fallback: `my-report-2025.html` → **My Report 2025**.
+
+**Empty categories** are shown on the index immediately with a *"No pages yet"* placeholder. Upload a file or add one directly to make the placeholder disappear.
 
 ---
 
@@ -106,20 +108,34 @@ When `BASIC_AUTH` is set, an **Upload** button appears next to each category hea
 
 1. Click **Upload** next to a category
 2. A credentials dialog appears — enter your username and password
-3. Choose an `.html` file from your computer
+3. Choose a file from your computer
 4. The file is uploaded into that category folder and the index refreshes automatically
 
 If a file with the same name already exists it is replaced.
 
 ### Credentials on every upload
 
-Credentials are asked for **on every upload**, not cached. The dialog is a custom UI element — the browser never sees a `WWW-Authenticate` challenge, so there is nothing for it to cache or auto-fill. The credentials are held in a short-lived JS variable for the duration of the single request and cleared immediately after, whether the upload succeeds or fails.
+Credentials are asked for **on every upload**, not cached. The dialog is a custom UI element — the browser never sees a `WWW-Authenticate` challenge, so there is nothing for it to cache or auto-fill. The credentials are held in a short-lived JS closure for the duration of the single request and cleared immediately after, whether the upload succeeds or fails.
 
 ### Restrictions
 
 - Accepted file types: `.html`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`, `.ico`
 - Maximum file size: 10 MB
-- Files can only be uploaded into existing category folders — new folders must be created on the filesystem
+- Files with non-ASCII characters in their names (e.g. em dashes) are handled correctly
+
+---
+
+## Creating categories
+
+When `BASIC_AUTH` is set, a **+ New category** button appears in the top-right of the header.
+
+### How it works
+
+1. Click **+ New category**
+2. Enter the category name, your username, and your password in one step
+3. The folder is created and the index refreshes automatically
+
+You can also create folders directly on the filesystem — they appear on the index within ~2 seconds and are immediately ready to accept uploads.
 
 ---
 
@@ -136,16 +152,16 @@ cp .env.example .env
 | `CONTENT_DIR`  | `./content`   | Path to your content directory on the host         |
 | `SITE_TITLE`   | `EasyHoster`  | Title shown in the index header                    |
 | `PORT`         | `8080`        | Host port to expose                                |
-| `BASIC_AUTH`   | *(unset)*     | Credentials for upload — set to `username:password`. Also enables the upload button. |
+| `BASIC_AUTH`   | *(unset)*     | Credentials for upload — set to `username:password`. Also enables the upload and new-category buttons. |
 | `AUTH_GLOBAL`  | *(unset)*     | Set to `true` to lock the **entire site** with the same credentials (requires `BASIC_AUTH`). |
 
 ### Auth modes at a glance
 
-| `BASIC_AUTH` | `AUTH_GLOBAL` | Site | Upload button | Upload auth |
+| `BASIC_AUTH` | `AUTH_GLOBAL` | Site | Upload / New category | Auth required |
 |---|---|---|---|---|
 | unset | — | public | hidden | — |
-| set | unset | public | shown | required on every upload |
-| set | `true` | 🔒 login required | shown | required on every upload |
+| set | unset | public | shown | on every action |
+| set | `true` | 🔒 login required | shown | on every action |
 
 Example `.env` for a team reports site (public browsing, upload protected):
 
@@ -206,6 +222,7 @@ Add a `meta.json` file to any folder to control how it appears on the index:
 - No directory listing — the generated index is the only navigation
 - `meta.json` files are blocked from being served directly
 - Nginx version not disclosed in headers or error pages
+- Both containers run as non-root users
 - **Upload auth**: credentials validated server-side on every request via `Authorization: Basic` header — the browser never issues a `WWW-Authenticate` challenge so credentials are never cached
 - **Global auth**: set `AUTH_GLOBAL=true` to lock the entire site behind HTTP Basic Auth (nginx-enforced)
 
@@ -291,12 +308,13 @@ easyhoster/
 │   └── reports/
 ├── generator/
 │   ├── generate.py                 ← index builder + file watcher
-│   ├── shortlinks_server.py        ← /s/<code> redirect + /api/shortlinks API
+│   ├── shortlinks_server.py        ← /s/<code> redirects + upload + mkdir APIs
+│   ├── entrypoint.sh               ← fixes volume ownership, drops to non-root
 │   ├── templates/
 │   │   └── index.html.j2           ← index page template
 │   └── Dockerfile
 └── nginx/
     ├── nginx.conf
-    ├── entrypoint.sh
+    ├── entrypoint.sh               ← writes auth config, starts nginx
     └── Dockerfile
 ```
