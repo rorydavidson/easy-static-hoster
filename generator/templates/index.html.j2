@@ -515,7 +515,7 @@
         {% if cat.pages %}
         {% for page in cat.pages %}
         <div class="page-item">
-          <a class="page-name" href="{{ page.path }}" title="{{ page.title }}">{{ page.title }}</a>
+          <a class="page-name" href="{{ page.path }}" title="{{ page.title }}" target="_blank">{{ page.title }}</a>
           {% if page.shortlink %}
           <span class="shortlink" title="Copy short link" onclick="copyShortlink(event, this, '{{ page.shortlink }}')">/s/{{ page.shortlink }}</span>
           {% endif %}
