@@ -32,6 +32,12 @@ _UPLOAD_ENABLED = bool(os.environ.get("BASIC_AUTH", "").strip())
 # Allowed short codes: lowercase letters, digits, hyphens, underscores. 1–50 chars.
 _CODE_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,49}$")
 
+# File types accepted by the upload endpoint
+_ALLOWED_SUFFIXES = {
+    ".html",
+    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico",
+}
+
 
 def load_shortlinks() -> dict:
     path = CONTENT_DIR / "shortlinks.json"
@@ -175,8 +181,8 @@ class ShortlinkHandler(BaseHTTPRequestHandler):
         if not filename or filename.startswith("."):
             self._json(400, {"error": "invalid filename"})
             return
-        if not filename.lower().endswith(".html"):
-            self._json(400, {"error": "only .html files are allowed"})
+        if Path(filename).suffix.lower() not in _ALLOWED_SUFFIXES:
+            self._json(400, {"error": "only HTML and image files are allowed (.html, .png, .jpg, .jpeg, .gif, .svg, .webp, .ico)"})
             return
 
         # ── Read body ─────────────────────────────────────────────────────────

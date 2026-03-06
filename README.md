@@ -117,7 +117,7 @@ Credentials are asked for **on every upload**, not cached. The dialog is a custo
 
 ### Restrictions
 
-- Only `.html` files are accepted
+- Accepted file types: `.html`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`, `.ico`
 - Maximum file size: 10 MB
 - Files can only be uploaded into existing category folders — new folders must be created on the filesystem
 
