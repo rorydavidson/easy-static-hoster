@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ site_title }}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #f6f7f9;
+      --surface:     #ffffff;
+      --border:      #e4e7ed;
+      --text:        #1c1c28;
+      --text-muted:  #8a90a8;
+      --accent:      #3b5bdb;
+      --accent-bg:   #f0f3ff;
+      --header-bg:   #16162a;
+      --header-line: rgba(255, 255, 255, 0.07);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    header {
+      background: var(--header-bg);
+      color: #fff;
+      padding: 2.25rem 3rem 2rem;
+      border-bottom: 1px solid var(--header-line);
+    }
+
+    .site-name {
+      font-size: 1.45rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: #fff;
+    }
+
+    .header-stats {
+      margin-top: 0.45rem;
+      font-size: 0.78rem;
+      color: rgba(255, 255, 255, 0.35);
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .header-stats .sep { opacity: 0.4; }
+
+    /* ── Layout ──────────────────────────────────────────────── */
+    main {
+      flex: 1;
+      max-width: 860px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 2.75rem 2rem;
+    }
+
+    /* ── Category ────────────────────────────────────────────── */
+    .category {
+      margin-bottom: 2.5rem;
+    }
+
+    .category-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .category-name {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+    }
+
+    .category-count {
+      font-size: 0.68rem;
+      color: #c4c8d8;
+    }
+
+    /* ── Page list ───────────────────────────────────────────── */
+    .page-list {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--surface);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    .page-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+      padding: 0.8rem 1.25rem;
+      text-decoration: none;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+      transition: background 0.12s;
+    }
+
+    .page-item:last-child {
+      border-bottom: none;
+    }
+
+    .page-item:hover {
+      background: var(--accent-bg);
+    }
+
+    .page-item:hover .page-name {
+      color: var(--accent);
+    }
+
+    .page-name {
+      font-size: 0.88rem;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: color 0.12s;
+    }
+
+    .page-date {
+      font-size: 0.73rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Empty state ─────────────────────────────────────────── */
+    .empty {
+      text-align: center;
+      padding: 5rem 2rem;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      line-height: 1.7;
+    }
+
+    /* ── Footer ──────────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 1.5rem;
+      font-size: 0.71rem;
+      color: #c4c8d8;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="site-name">{{ site_title }}</div>
+    <div class="header-stats">
+      <span>{{ categories | length }} categor{{ "y" if categories | length == 1 else "ies" }}</span>
+      <span class="sep">&middot;</span>
+      <span>{{ total_pages }} page{{ "" if total_pages == 1 else "s" }}</span>
+    </div>
+  </header>
+
+  <main>
+    {% if not categories %}
+    <div class="empty">
+      No pages yet.<br>
+      Drop <code>.html</code> files into category folders inside the content directory.
+    </div>
+    {% else %}
+    {% for cat in categories %}
+    <section class="category">
+      <div class="category-label">
+        <span class="category-name">{{ cat.title }}</span>
+        <span class="category-count">{{ cat.pages | length }}</span>
+      </div>
+      <div class="page-list">
+        {% for page in cat.pages %}
+        <a class="page-item" href="{{ page.path }}">
+          <span class="page-name" title="{{ page.title }}">{{ page.title }}</span>
+          <span class="page-date">{{ page.modified }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+    {% endif %}
+  </main>
+
+  <footer>Updated {{ generated }}</footer>
+
+</body>
+</html>

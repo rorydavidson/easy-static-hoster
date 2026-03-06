@@ -1,0 +1,27 @@
+services:
+  generator:
+    build: ./generator
+    volumes:
+      - ${CONTENT_DIR:-./content}:/content
+    environment:
+      SITE_TITLE: ${SITE_TITLE:-EasyHoster}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "test", "-f", "/content/index.html"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+
+  nginx:
+    build: ./nginx
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - ${CONTENT_DIR:-./content}:/content:ro
+    environment:
+      BASIC_AUTH: ${BASIC_AUTH:-}
+    depends_on:
+      generator:
+        condition: service_healthy
+    restart: unless-stopped
