@@ -528,10 +528,7 @@
     var _activeBtn = null;
 
     /* ── Upload ─────────────────────────────────────────────── */
-    // _uploadCreds holds base64(user:pass) only for the duration of one upload.
-    // It is cleared immediately after the fetch, so nothing lingers in memory.
     var _uploadFolder = null;
-    var _uploadCreds  = null;
 
     function triggerUpload(folder) {
       _uploadFolder = folder;
@@ -546,28 +543,39 @@
       var user = document.getElementById('cred-user').value.trim();
       var pass = document.getElementById('cred-pass').value;
       if (!user || !pass) return;
-      _uploadCreds = btoa(user + ':' + pass);
+
+      // Capture folder and creds in a closure — no module-level creds state
+      var folder = _uploadFolder;
+      var creds;
+      try {
+        creds = btoa(user + ':' + pass);
+      } catch (err) {
+        _showUploadToast('Credentials must only contain ASCII characters', 'error');
+        return;
+      }
+      _uploadFolder = null;
       document.getElementById('cred-modal').classList.add('hidden');
-      document.getElementById('upload-input').click();
+
+      // One-shot change listener: removes itself after firing so repeated uploads
+      // each get a fresh handler with their own captured folder/creds values.
+      var input = document.getElementById('upload-input');
+      function handleFile(e) {
+        input.removeEventListener('change', handleFile);
+        var file = e.target.files[0];
+        e.target.value = '';           // reset so the same file can be re-uploaded
+        if (file) _doUpload(folder, file, creds);
+      }
+      input.addEventListener('change', handleFile);
+      input.click();
     }
 
     function credCancel() {
       _uploadFolder = null;
-      _uploadCreds  = null;
       document.getElementById('cred-modal').classList.add('hidden');
     }
 
-    document.getElementById('upload-input').addEventListener('change', function (e) {
-      var file = e.target.files[0];
-      if (!file || !_uploadFolder) return;
-
-      var folder   = _uploadFolder;
+    function _doUpload(folder, file, creds) {
       var filename = file.name;
-      var creds    = _uploadCreds;
-      _uploadFolder = null;
-      _uploadCreds  = null;          // clear immediately — not kept after this request
-      e.target.value = '';           // reset so the same file can be re-uploaded
-
       _showUploadToast('Uploading ' + filename + '\u2026', 'pending');
 
       fetch('/api/upload', {
@@ -592,7 +600,7 @@
       .catch(function () {
         _showUploadToast('Network error during upload', 'error');
       });
-    });
+    }
 
     function _showUploadToast(msg, type) {
       var el = document.getElementById('upload-toast');

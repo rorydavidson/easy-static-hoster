@@ -1,6 +1,6 @@
 """
 EasyHoster shortlinks server — runs as a daemon thread inside the generator
-container.
+container, now using Flask for better security and production readiness.
 
 GET  /s/<code>         → 302 redirect to the mapped page
 POST /api/shortlinks   → set or remove a short link (JSON body)
@@ -13,9 +13,10 @@ import json
 import logging
 import os
 import re
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import quote
+
+from flask import Flask, request, jsonify, redirect, Response
 
 log = logging.getLogger(__name__)
 
@@ -25,8 +26,6 @@ PORT = 5000
 UPLOAD_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 
 # Upload is only active when HTTP Basic Auth is configured (BASIC_AUTH env var).
-# nginx enforces the auth before proxying to us; this flag prevents the endpoint
-# being reachable at all when no auth is in place.
 _UPLOAD_ENABLED = bool(os.environ.get("BASIC_AUTH", "").strip())
 
 # Allowed short codes: lowercase letters, digits, hyphens, underscores. 1–50 chars.
@@ -38,6 +37,7 @@ _ALLOWED_SUFFIXES = {
     ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico",
 }
 
+app = Flask(__name__)
 
 def load_shortlinks() -> dict:
     path = CONTENT_DIR / "shortlinks.json"
@@ -58,189 +58,127 @@ def save_shortlinks(links: dict) -> None:
     tmp.rename(links_file)
 
 
-class ShortlinkHandler(BaseHTTPRequestHandler):
+def _check_upload_auth() -> bool:
+    """Return True if the Authorization header matches BASIC_AUTH exactly."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Basic "):
+        return False
+    try:
+        decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+    except Exception:
+        return False
+    return decoded == os.environ.get("BASIC_AUTH", "")
 
-    # ── GET /s/<code> ─────────────────────────────────────────────────────────
 
-    def do_GET(self) -> None:
-        parts = self.path.strip("/").split("/", 1)
-        if len(parts) != 2 or parts[0] != "s" or not parts[1]:
-            self._respond(400, "Bad request")
-            return
+@app.route('/s/<code>', methods=['GET'])
+def redirect_shortlink(code):
+    links = load_shortlinks()
+    target = links.get(code)
 
-        code = parts[1]
-        links = load_shortlinks()
-        target = links.get(code)
+    if not target:
+        return f"Short link '{code}' not found", 404
 
-        if not target:
-            self._respond(404, f"Short link '{code}' not found")
-            return
+    # URL-encode so non-ASCII chars are safe to send in a Latin-1 HTTP header.
+    location = target if target.startswith("/") else f"/{target}"
+    location = quote(location, safe="/:@!$&'()*+,;=")
+    
+    response = redirect(location, code=302)
+    response.headers["Cache-Control"] = "no-cache"
+    return response
 
-        # URL-encode so non-ASCII chars (em dashes, accents, spaces, etc.)
-        # are safe to send in a Latin-1 HTTP header.
-        location = target if target.startswith("/") else f"/{target}"
-        location = quote(location, safe="/:@!$&'()*+,;=")
-        self.send_response(302)
-        self.send_header("Location", location)
-        self.send_header("Cache-Control", "no-cache")
-        self.end_headers()
 
-    # ── POST dispatcher ───────────────────────────────────────────────────────
+@app.route('/api/shortlinks', methods=['POST'])
+def handle_shortlink():
+    # As requested, #1 (auth for shortlinks) is ignored.
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify({"error": "invalid JSON"}), 400
 
-    def do_POST(self) -> None:
-        if self.path == "/api/shortlinks":
-            self._handle_shortlink()
-        elif self.path == "/api/upload":
-            self._handle_upload()
-        else:
-            self._json(404, {"error": "not found"})
+    page_path = str(data.get("path", "")).strip().lstrip("/")
+    code = str(data.get("code", "")).strip().lower()
 
-    # ── POST /api/shortlinks ──────────────────────────────────────────────────
+    if not page_path:
+        return jsonify({"error": "path is required"}), 400
 
-    def _handle_shortlink(self) -> None:
-        length = int(self.headers.get("Content-Length", 0))
-        if length > 4096:
-            self._json(400, {"error": "request too large"})
-            return
+    if code and not _CODE_RE.match(code):
+        return jsonify({"error": "code must be lowercase letters, digits, hyphens or underscores"}), 400
 
-        try:
-            data = json.loads(self.rfile.read(length))
-        except (json.JSONDecodeError, ValueError):
-            self._json(400, {"error": "invalid JSON"})
-            return
+    links = load_shortlinks()
 
-        page_path = str(data.get("path", "")).strip().lstrip("/")
-        code = str(data.get("code", "")).strip().lower()
+    # Remove any existing code that points to this page
+    links = {k: v for k, v in links.items() if v.lstrip("/") != page_path}
 
-        if not page_path:
-            self._json(400, {"error": "path is required"})
-            return
+    if code:
+        if code in links:
+            return jsonify({"error": f"'{code}' is already used by another page"}), 409
+        links[code] = page_path
 
-        if code and not _CODE_RE.match(code):
-            self._json(400, {"error": "code must be lowercase letters, digits, hyphens or underscores"})
-            return
+    try:
+        save_shortlinks(links)
+    except Exception as exc:
+        log.error("Failed to write shortlinks.json: %s", exc)
+        return jsonify({"error": "failed to save"}), 500
 
-        links = load_shortlinks()
+    action = f"set to '{code}'" if code else "removed"
+    log.info("Shortlink for %s %s", page_path, action)
+    return jsonify({"ok": True})
 
-        # Remove any existing code that points to this page
-        links = {k: v for k, v in links.items() if v.lstrip("/") != page_path}
 
-        if code:
-            if code in links:
-                self._json(409, {"error": f"'{code}' is already used by another page"})
-                return
-            links[code] = page_path
+@app.route('/api/upload', methods=['POST'])
+def handle_upload():
+    if not _UPLOAD_ENABLED:
+        return jsonify({"error": "upload not available"}), 403
 
-        try:
-            save_shortlinks(links)
-        except Exception as exc:
-            log.error("Failed to write shortlinks.json: %s", exc)
-            self._json(500, {"error": "failed to save"})
-            return
+    if not _check_upload_auth():
+        return jsonify({"error": "invalid credentials"}), 401
 
-        action = f"set to '{code}'" if code else "removed"
-        log.info("Shortlink for %s %s", page_path, action)
-        self._json(200, {"ok": True})
+    # ── Validate folder ───────────────────────────────────────────────────
+    folder = request.headers.get("X-Folder", "").strip()
+    if not folder or "/" in folder or "\\" in folder or folder in (".", ".."):
+        return jsonify({"error": "invalid folder"}), 400
 
-    # ── POST /api/upload ──────────────────────────────────────────────────────
+    folder_path = CONTENT_DIR / folder
+    # Ensure it resolves inside CONTENT_DIR (no path traversal)
+    try:
+        if not folder_path.resolve().as_posix().startswith(CONTENT_DIR.resolve().as_posix()):
+            return jsonify({"error": "invalid folder"}), 400
+    except Exception:
+        return jsonify({"error": "invalid folder"}), 400
 
-    def _handle_upload(self) -> None:
-        if not _UPLOAD_ENABLED:
-            self._json(403, {"error": "upload not available"})
-            return
+    if not folder_path.is_dir():
+        return jsonify({"error": f"folder '{folder}' not found"}), 400
 
-        # ── Validate credentials ──────────────────────────────────────────────
-        # Credentials are checked on every request; the JS modal prompts the
-        # user each time so nothing is cached by the browser.
-        if not self._check_upload_auth():
-            # Return 401 without WWW-Authenticate so the browser does not show
-            # its own credential dialog — the JS handles the error via the toast.
-            self._json(401, {"error": "invalid credentials"})
-            return
+    # ── Validate filename ─────────────────────────────────────────────────
+    raw_name = request.headers.get("X-Filename", "").strip()
+    filename = os.path.basename(raw_name)   # strip any path components
+    if not filename or filename.startswith("."):
+        return jsonify({"error": "invalid filename"}), 400
+    if Path(filename).suffix.lower() not in _ALLOWED_SUFFIXES:
+        return jsonify({"error": "only HTML and image files are allowed"}), 400
 
-        # ── Validate folder ───────────────────────────────────────────────────
-        folder = self.headers.get("X-Folder", "").strip()
-        if not folder or "/" in folder or "\\" in folder or folder in (".", ".."):
-            self._json(400, {"error": "invalid folder"})
-            return
+    # ── Read body ─────────────────────────────────────────────────────────
+    if request.content_length is None or request.content_length == 0:
+        return jsonify({"error": "empty file"}), 400
+    if request.content_length > UPLOAD_MAX_BYTES:
+        mb = UPLOAD_MAX_BYTES // 1024 // 1024
+        return jsonify({"error": f"file too large (max {mb} MB)"}), 400
 
-        folder_path = CONTENT_DIR / folder
-        # Ensure it resolves inside CONTENT_DIR (no path traversal)
-        try:
-            folder_path.resolve().relative_to(CONTENT_DIR.resolve())
-        except ValueError:
-            self._json(400, {"error": "invalid folder"})
-            return
-        if not folder_path.is_dir():
-            self._json(400, {"error": f"folder '{folder}' not found"})
-            return
+    data = request.get_data()
 
-        # ── Validate filename ─────────────────────────────────────────────────
-        raw_name = self.headers.get("X-Filename", "").strip()
-        filename = os.path.basename(raw_name)   # strip any path components
-        if not filename or filename.startswith("."):
-            self._json(400, {"error": "invalid filename"})
-            return
-        if Path(filename).suffix.lower() not in _ALLOWED_SUFFIXES:
-            self._json(400, {"error": "only HTML and image files are allowed (.html, .png, .jpg, .jpeg, .gif, .svg, .webp, .ico)"})
-            return
+    # ── Write atomically ──────────────────────────────────────────────────
+    dest = folder_path / filename
+    existed = dest.exists()
+    tmp = dest.with_suffix(".upload_tmp")
+    try:
+        tmp.write_bytes(data)
+        tmp.rename(dest)
+    except Exception as exc:
+        log.error("Upload write failed: %s", exc)
+        return jsonify({"error": "failed to save file"}), 500
 
-        # ── Read body ─────────────────────────────────────────────────────────
-        length = int(self.headers.get("Content-Length", 0))
-        if length == 0:
-            self._json(400, {"error": "empty file"})
-            return
-        if length > UPLOAD_MAX_BYTES:
-            mb = UPLOAD_MAX_BYTES // 1024 // 1024
-            self._json(400, {"error": f"file too large (max {mb} MB)"})
-            return
-
-        data = self.rfile.read(length)
-
-        # ── Write atomically ──────────────────────────────────────────────────
-        dest = folder_path / filename
-        existed = dest.exists()
-        tmp = dest.with_suffix(".upload_tmp")
-        try:
-            tmp.write_bytes(data)
-            tmp.rename(dest)
-        except Exception as exc:
-            log.error("Upload write failed: %s", exc)
-            self._json(500, {"error": "failed to save file"})
-            return
-
-        verb = "Replaced" if existed else "Uploaded"
-        log.info("%s %s in %s/", verb, filename, folder)
-        self._json(200, {"ok": True, "filename": filename, "folder": folder})
-
-    # ── Auth ──────────────────────────────────────────────────────────────────
-
-    def _check_upload_auth(self) -> bool:
-        """Return True if the Authorization header matches BASIC_AUTH exactly."""
-        auth_header = self.headers.get("Authorization", "")
-        if not auth_header.startswith("Basic "):
-            return False
-        try:
-            decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
-        except Exception:
-            return False
-        return decoded == os.environ.get("BASIC_AUTH", "")
-
-    # ── Helpers ───────────────────────────────────────────────────────────────
-
-    def _respond(self, status: int, body: str, content_type: str = "text/plain") -> None:
-        encoded = body.encode()
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(encoded)))
-        self.end_headers()
-        self.wfile.write(encoded)
-
-    def _json(self, status: int, data: dict) -> None:
-        self._respond(status, json.dumps(data), "application/json")
-
-    def log_message(self, fmt, *args) -> None:
-        log.debug("shortlinks: " + fmt, *args)
+    verb = "Replaced" if existed else "Uploaded"
+    log.info("%s %s in %s/", verb, filename, folder)
+    return jsonify({"ok": True, "filename": filename, "folder": folder})
 
 
 def start(content_dir: Path | None = None) -> None:
@@ -256,6 +194,5 @@ def start(content_dir: Path | None = None) -> None:
         except Exception as exc:
             log.warning("Could not create shortlinks.json: %s", exc)
 
-    server = HTTPServer(("0.0.0.0", PORT), ShortlinkHandler)
-    log.info("Shortlinks server listening on port %d", PORT)
-    server.serve_forever()
+    log.info("Shortlinks server starting on port %d", PORT)
+    app.run(host="0.0.0.0", port=PORT)
