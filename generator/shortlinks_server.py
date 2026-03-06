@@ -14,7 +14,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from flask import Flask, request, jsonify, redirect, Response
 
@@ -149,7 +149,7 @@ def handle_upload():
         return jsonify({"error": f"folder '{folder}' not found"}), 400
 
     # ── Validate filename ─────────────────────────────────────────────────
-    raw_name = request.headers.get("X-Filename", "").strip()
+    raw_name = unquote(request.headers.get("X-Filename", "").strip())
     filename = os.path.basename(raw_name)   # strip any path components
     if not filename or filename.startswith("."):
         return jsonify({"error": "invalid filename"}), 400
