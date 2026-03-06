@@ -5,6 +5,7 @@ services:
       - ${CONTENT_DIR:-./content}:/content
     environment:
       SITE_TITLE: ${SITE_TITLE:-EasyHoster}
+      BASIC_AUTH: ${BASIC_AUTH:-}
     expose:
       - "5000"
     restart: unless-stopped
@@ -23,6 +24,7 @@ services:
       - ${CONTENT_DIR:-./content}:/content:ro
     environment:
       BASIC_AUTH: ${BASIC_AUTH:-}
+      AUTH_GLOBAL: ${AUTH_GLOBAL:-}
     depends_on:
       generator:
         condition: service_healthy

@@ -4,8 +4,11 @@ container.
 
 GET  /s/<code>         → 302 redirect to the mapped page
 POST /api/shortlinks   → set or remove a short link (JSON body)
+POST /api/upload       → upload an HTML file to an existing category folder
+                         (only active when BASIC_AUTH env var is set)
 """
 
+import base64
 import json
 import logging
 import os
@@ -18,6 +21,13 @@ log = logging.getLogger(__name__)
 
 CONTENT_DIR = Path(os.environ.get("CONTENT_DIR", "/content"))
 PORT = 5000
+
+UPLOAD_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+
+# Upload is only active when HTTP Basic Auth is configured (BASIC_AUTH env var).
+# nginx enforces the auth before proxying to us; this flag prevents the endpoint
+# being reachable at all when no auth is in place.
+_UPLOAD_ENABLED = bool(os.environ.get("BASIC_AUTH", "").strip())
 
 # Allowed short codes: lowercase letters, digits, hyphens, underscores. 1–50 chars.
 _CODE_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,49}$")
@@ -69,13 +79,19 @@ class ShortlinkHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
 
-    # ── POST /api/shortlinks ──────────────────────────────────────────────────
+    # ── POST dispatcher ───────────────────────────────────────────────────────
 
     def do_POST(self) -> None:
-        if self.path != "/api/shortlinks":
+        if self.path == "/api/shortlinks":
+            self._handle_shortlink()
+        elif self.path == "/api/upload":
+            self._handle_upload()
+        else:
             self._json(404, {"error": "not found"})
-            return
 
+    # ── POST /api/shortlinks ──────────────────────────────────────────────────
+
+    def _handle_shortlink(self) -> None:
         length = int(self.headers.get("Content-Length", 0))
         if length > 4096:
             self._json(400, {"error": "request too large"})
@@ -119,6 +135,90 @@ class ShortlinkHandler(BaseHTTPRequestHandler):
         action = f"set to '{code}'" if code else "removed"
         log.info("Shortlink for %s %s", page_path, action)
         self._json(200, {"ok": True})
+
+    # ── POST /api/upload ──────────────────────────────────────────────────────
+
+    def _handle_upload(self) -> None:
+        if not _UPLOAD_ENABLED:
+            self._json(403, {"error": "upload not available"})
+            return
+
+        # ── Validate credentials ──────────────────────────────────────────────
+        # Credentials are checked on every request; the JS modal prompts the
+        # user each time so nothing is cached by the browser.
+        if not self._check_upload_auth():
+            # Return 401 without WWW-Authenticate so the browser does not show
+            # its own credential dialog — the JS handles the error via the toast.
+            self._json(401, {"error": "invalid credentials"})
+            return
+
+        # ── Validate folder ───────────────────────────────────────────────────
+        folder = self.headers.get("X-Folder", "").strip()
+        if not folder or "/" in folder or "\\" in folder or folder in (".", ".."):
+            self._json(400, {"error": "invalid folder"})
+            return
+
+        folder_path = CONTENT_DIR / folder
+        # Ensure it resolves inside CONTENT_DIR (no path traversal)
+        try:
+            folder_path.resolve().relative_to(CONTENT_DIR.resolve())
+        except ValueError:
+            self._json(400, {"error": "invalid folder"})
+            return
+        if not folder_path.is_dir():
+            self._json(400, {"error": f"folder '{folder}' not found"})
+            return
+
+        # ── Validate filename ─────────────────────────────────────────────────
+        raw_name = self.headers.get("X-Filename", "").strip()
+        filename = os.path.basename(raw_name)   # strip any path components
+        if not filename or filename.startswith("."):
+            self._json(400, {"error": "invalid filename"})
+            return
+        if not filename.lower().endswith(".html"):
+            self._json(400, {"error": "only .html files are allowed"})
+            return
+
+        # ── Read body ─────────────────────────────────────────────────────────
+        length = int(self.headers.get("Content-Length", 0))
+        if length == 0:
+            self._json(400, {"error": "empty file"})
+            return
+        if length > UPLOAD_MAX_BYTES:
+            mb = UPLOAD_MAX_BYTES // 1024 // 1024
+            self._json(400, {"error": f"file too large (max {mb} MB)"})
+            return
+
+        data = self.rfile.read(length)
+
+        # ── Write atomically ──────────────────────────────────────────────────
+        dest = folder_path / filename
+        existed = dest.exists()
+        tmp = dest.with_suffix(".upload_tmp")
+        try:
+            tmp.write_bytes(data)
+            tmp.rename(dest)
+        except Exception as exc:
+            log.error("Upload write failed: %s", exc)
+            self._json(500, {"error": "failed to save file"})
+            return
+
+        verb = "Replaced" if existed else "Uploaded"
+        log.info("%s %s in %s/", verb, filename, folder)
+        self._json(200, {"ok": True, "filename": filename, "folder": folder})
+
+    # ── Auth ──────────────────────────────────────────────────────────────────
+
+    def _check_upload_auth(self) -> bool:
+        """Return True if the Authorization header matches BASIC_AUTH exactly."""
+        auth_header = self.headers.get("Authorization", "")
+        if not auth_header.startswith("Basic "):
+            return False
+        try:
+            decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+        except Exception:
+            return False
+        return decoded == os.environ.get("BASIC_AUTH", "")
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

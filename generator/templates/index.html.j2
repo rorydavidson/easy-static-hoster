@@ -278,6 +278,136 @@
       min-height: 1.1em;
     }
 
+    /* ── Upload button ───────────────────────────────────────── */
+    .upload-btn {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.18rem 0.55rem;
+      cursor: pointer;
+      transition: color 0.12s, background 0.12s, border-color 0.12s;
+    }
+
+    .upload-btn:hover {
+      color: var(--accent);
+      background: var(--accent-bg);
+      border-color: #c5ccec;
+    }
+
+    /* ── Upload toast ────────────────────────────────────────── */
+    .upload-toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 300;
+      padding: 0.65rem 1rem;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    }
+
+    .upload-toast.hidden { display: none; }
+    .upload-toast.pending { background: var(--surface); border: 1px solid var(--border); color: var(--text-muted); }
+    .upload-toast.ok      { background: var(--badge-ok); border: 1px solid #b2f2bb; color: var(--badge-ok-fg); }
+    .upload-toast.error   { background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger); }
+
+    /* ── Credentials modal ───────────────────────────────────── */
+    .cred-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 400;
+      background: rgba(0, 0, 0, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .cred-modal.hidden { display: none; }
+
+    .cred-dialog {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      width: 280px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16);
+    }
+
+    .cred-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 1rem;
+    }
+
+    .cred-field { margin-bottom: 0.6rem; }
+
+    .cred-field label {
+      display: block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 0.3rem;
+    }
+
+    .cred-field input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.45rem 0.6rem;
+      font-size: 0.82rem;
+      color: var(--text);
+      background: var(--bg);
+      outline: none;
+      transition: border-color 0.12s;
+    }
+
+    .cred-field input:focus { border-color: var(--accent); }
+
+    .cred-actions {
+      display: flex;
+      gap: 0.4rem;
+      margin-top: 0.9rem;
+    }
+
+    .cred-confirm {
+      flex: 1;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      padding: 0.45rem 0.6rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+
+    .cred-confirm:hover { background: #2f4cc9; }
+
+    .cred-cancel {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.45rem 0.6rem;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+
+    .cred-cancel:hover { background: var(--bg); }
+
     /* ── Empty state ─────────────────────────────────────────── */
     .empty {
       text-align: center;
@@ -320,6 +450,14 @@
       <div class="category-label">
         <span class="category-name">{{ cat.title }}</span>
         <span class="category-count">{{ cat.pages | length }}</span>
+        {% if upload_enabled %}
+        <button type="button" class="upload-btn" data-folder="{{ cat.folder }}"
+                onclick="triggerUpload(this.dataset.folder)"
+                title="Upload an HTML file to {{ cat.title }}">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload
+        </button>
+        {% endif %}
       </div>
       <div class="page-list">
         {% for page in cat.pages %}
@@ -349,6 +487,29 @@
 
   <footer>Updated {{ generated }}</footer>
 
+  <!-- Upload: hidden file input + toast (rendered regardless; JS only runs when upload_enabled) -->
+  <input type="file" id="upload-input" accept=".html" style="display:none">
+  <div id="upload-toast" class="upload-toast hidden" aria-live="polite"></div>
+
+  <!-- Credentials modal — shown on every upload click; credentials are never cached -->
+  <div id="cred-modal" class="cred-modal hidden" role="dialog" aria-modal="true" aria-label="Upload credentials">
+    <div class="cred-dialog">
+      <div class="cred-title">Upload credentials</div>
+      <div class="cred-field">
+        <label for="cred-user">Username</label>
+        <input id="cred-user" type="text" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="cred-field">
+        <label for="cred-pass">Password</label>
+        <input id="cred-pass" type="password" autocomplete="new-password">
+      </div>
+      <div class="cred-actions">
+        <button type="button" class="cred-confirm" onclick="credConfirm()">Continue</button>
+        <button type="button" class="cred-cancel" onclick="credCancel()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Shared short link editor popover -->
   <div id="link-popover" class="link-popover hidden" role="dialog" aria-label="Edit short link">
     <div class="popover-label">Short link</div>
@@ -365,6 +526,82 @@
 
   <script>
     var _activeBtn = null;
+
+    /* ── Upload ─────────────────────────────────────────────── */
+    // _uploadCreds holds base64(user:pass) only for the duration of one upload.
+    // It is cleared immediately after the fetch, so nothing lingers in memory.
+    var _uploadFolder = null;
+    var _uploadCreds  = null;
+
+    function triggerUpload(folder) {
+      _uploadFolder = folder;
+      // Show credentials dialog — user must enter credentials on every upload
+      document.getElementById('cred-user').value = '';
+      document.getElementById('cred-pass').value = '';
+      document.getElementById('cred-modal').classList.remove('hidden');
+      document.getElementById('cred-user').focus();
+    }
+
+    function credConfirm() {
+      var user = document.getElementById('cred-user').value.trim();
+      var pass = document.getElementById('cred-pass').value;
+      if (!user || !pass) return;
+      _uploadCreds = btoa(user + ':' + pass);
+      document.getElementById('cred-modal').classList.add('hidden');
+      document.getElementById('upload-input').click();
+    }
+
+    function credCancel() {
+      _uploadFolder = null;
+      _uploadCreds  = null;
+      document.getElementById('cred-modal').classList.add('hidden');
+    }
+
+    document.getElementById('upload-input').addEventListener('change', function (e) {
+      var file = e.target.files[0];
+      if (!file || !_uploadFolder) return;
+
+      var folder   = _uploadFolder;
+      var filename = file.name;
+      var creds    = _uploadCreds;
+      _uploadFolder = null;
+      _uploadCreds  = null;          // clear immediately — not kept after this request
+      e.target.value = '';           // reset so the same file can be re-uploaded
+
+      _showUploadToast('Uploading ' + filename + '\u2026', 'pending');
+
+      fetch('/api/upload', {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/octet-stream',
+          'X-Folder':      folder,
+          'X-Filename':    filename,
+          'Authorization': 'Basic ' + creds,
+        },
+        body: file,
+      })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          _showUploadToast('Upload failed: ' + (res.data.error || 'unknown error'), 'error');
+        } else {
+          _showUploadToast(filename + ' uploaded \u2014 refreshing\u2026', 'ok');
+          setTimeout(function () { location.reload(); }, 2000);
+        }
+      })
+      .catch(function () {
+        _showUploadToast('Network error during upload', 'error');
+      });
+    });
+
+    function _showUploadToast(msg, type) {
+      var el = document.getElementById('upload-toast');
+      el.textContent = msg;
+      el.className = 'upload-toast ' + type;
+      if (type !== 'pending') {
+        setTimeout(function () { el.className = 'upload-toast hidden'; }, 5000);
+      }
+    }
 
     /* ── Copy badge ─────────────────────────────────────────── */
     function copyShortlink(event, el, code) {
@@ -486,8 +723,12 @@
     });
 
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') closeEditor();
-      if (e.key === 'Enter' && _activeBtn) { e.preventDefault(); saveShortlink(); }
+      var credOpen = !document.getElementById('cred-modal').classList.contains('hidden');
+      if (e.key === 'Escape') { closeEditor(); credCancel(); }
+      if (e.key === 'Enter') {
+        if (credOpen) { e.preventDefault(); credConfirm(); }
+        else if (_activeBtn) { e.preventDefault(); saveShortlink(); }
+      }
     });
   </script>
 

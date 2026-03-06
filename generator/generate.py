@@ -137,6 +137,7 @@ def build_context(content_dir: Path, site_title: str) -> dict:
         categories.append(
             {
                 "title": meta.get("title", humanize(folder.name)),
+                "folder": folder.name,
                 "order": meta.get("order", 999),
                 "pages": pages,
             }
@@ -151,6 +152,9 @@ def build_context(content_dir: Path, site_title: str) -> dict:
         "categories": categories,
         "total_pages": total_pages,
         "generated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        # Upload button is shown only when BASIC_AUTH is configured, so that
+        # the endpoint is always protected by nginx's HTTP Basic Auth.
+        "upload_enabled": bool(os.environ.get("BASIC_AUTH", "").strip()),
     }
 
 

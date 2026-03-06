@@ -98,6 +98,31 @@ Short link mappings are stored in `content/shortlinks.json` and survive containe
 
 ---
 
+## Uploading files
+
+When `BASIC_AUTH` is set, an **Upload** button appears next to each category heading.
+
+### How it works
+
+1. Click **Upload** next to a category
+2. A credentials dialog appears — enter your username and password
+3. Choose an `.html` file from your computer
+4. The file is uploaded into that category folder and the index refreshes automatically
+
+If a file with the same name already exists it is replaced.
+
+### Credentials on every upload
+
+Credentials are asked for **on every upload**, not cached. The dialog is a custom UI element — the browser never sees a `WWW-Authenticate` challenge, so there is nothing for it to cache or auto-fill. The credentials are held in a short-lived JS variable for the duration of the single request and cleared immediately after, whether the upload succeeds or fails.
+
+### Restrictions
+
+- Only `.html` files are accepted
+- Maximum file size: 10 MB
+- Files can only be uploaded into existing category folders — new folders must be created on the filesystem
+
+---
+
 ## Configuration
 
 Copy `.env.example` to `.env` and edit as needed:
@@ -111,15 +136,33 @@ cp .env.example .env
 | `CONTENT_DIR`  | `./content`   | Path to your content directory on the host         |
 | `SITE_TITLE`   | `EasyHoster`  | Title shown in the index header                    |
 | `PORT`         | `8080`        | Host port to expose                                |
-| `BASIC_AUTH`   | *(unset)*     | Enable HTTP Basic Auth — set to `username:password`|
+| `BASIC_AUTH`   | *(unset)*     | Credentials for upload — set to `username:password`. Also enables the upload button. |
+| `AUTH_GLOBAL`  | *(unset)*     | Set to `true` to lock the **entire site** with the same credentials (requires `BASIC_AUTH`). |
 
-Example `.env` for a team reports site:
+### Auth modes at a glance
+
+| `BASIC_AUTH` | `AUTH_GLOBAL` | Site | Upload button | Upload auth |
+|---|---|---|---|---|
+| unset | — | public | hidden | — |
+| set | unset | public | shown | required on every upload |
+| set | `true` | 🔒 login required | shown | required on every upload |
+
+Example `.env` for a team reports site (public browsing, upload protected):
 
 ```env
 CONTENT_DIR=/data/reports
 SITE_TITLE=Acme Reports
 PORT=8080
 BASIC_AUTH=admin:correct-horse-battery-staple
+```
+
+Example `.env` for a fully locked-down site:
+
+```env
+CONTENT_DIR=/data/reports
+SITE_TITLE=Acme Reports
+BASIC_AUTH=admin:correct-horse-battery-staple
+AUTH_GLOBAL=true
 ```
 
 ---
@@ -162,10 +205,11 @@ Add a `meta.json` file to any folder to control how it appears on the index:
 - Rate limiting (20 req/s per real client IP, burst 40)
 - No directory listing — the generated index is the only navigation
 - `meta.json` files are blocked from being served directly
-- Optional HTTP Basic Auth via `BASIC_AUTH` env var
 - Nginx version not disclosed in headers or error pages
+- **Upload auth**: credentials validated server-side on every request via `Authorization: Basic` header — the browser never issues a `WWW-Authenticate` challenge so credentials are never cached
+- **Global auth**: set `AUTH_GLOBAL=true` to lock the entire site behind HTTP Basic Auth (nginx-enforced)
 
-EasyHoster is designed for internal or small-team use. If you expose it publicly, use `BASIC_AUTH` or put it behind a reverse proxy that handles TLS.
+EasyHoster is designed for internal or small-team use. If you expose it publicly, use `AUTH_GLOBAL=true` or put it behind a reverse proxy that handles TLS.
 
 ---
 
