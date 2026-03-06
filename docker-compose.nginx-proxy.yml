@@ -1,0 +1,37 @@
+# nginx-proxy overlay
+#
+# Use this file on top of the base compose file when running behind
+# jwilder/nginx-proxy (or nginx-proxy/nginx-proxy) + acme-companion.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.nginx-proxy.yml up -d
+#
+# Required env vars (add to .env):
+#   VIRTUAL_HOST=reports.example.com
+#
+# Optional:
+#   PROXY_NETWORK=nginx-proxy   (default: nginx-proxy)
+#   LETSENCRYPT_HOST=reports.example.com
+#   LETSENCRYPT_EMAIL=you@example.com
+
+networks:
+  # The shared Docker network that nginx-proxy is attached to.
+  # Create it once on the host:  docker network create nginx-proxy
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-nginx-proxy}
+
+services:
+  nginx:
+    # Tell nginx-proxy which hostname to route and which internal port to use.
+    environment:
+      VIRTUAL_HOST: ${VIRTUAL_HOST:?VIRTUAL_HOST must be set in .env (e.g. reports.example.com)}
+      VIRTUAL_PORT: 8080
+      # Uncomment to enable automatic TLS via acme-companion:
+      # LETSENCRYPT_HOST: ${LETSENCRYPT_HOST:-}
+      # LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-}
+    networks:
+      # Keep the default internal network (nginx ↔ generator ↔ content volume)
+      - default
+      # Also attach to the proxy network so nginx-proxy can reach this container
+      - proxy

@@ -53,7 +53,48 @@ content/
 
 The index updates automatically within ~2 seconds. No restart needed.
 
-**Filename → title:** `my-report-2025.html` becomes **My Report 2025** on the index (hyphens and underscores become spaces, title-cased).
+**Page titles** are read from the HTML `<title>` tag inside each file. If no `<title>` is found, the filename is humanised as a fallback: `my-report-2025.html` → **My Report 2025**.
+
+---
+
+## Short links
+
+Every page on the index can have a short, memorable URL — e.g. `/s/q1` instead of `/presentations/Q1 2025 Review.html`.
+
+### Creating or editing a short link
+
+Click the **chain-link icon** (🔗) that appears on the right of any row when you hover over it. A small popover opens:
+
+1. Type a code — lowercase letters, digits, hyphens, and underscores only (e.g. `q1`, `annual-report`, `demo_2025`)
+2. Click **Save** — the badge `/s/your-code` appears on the row immediately
+
+The change is written to `shortlinks.json` in your content directory with no restart needed.
+
+### Copying a short link
+
+Click the `/s/code` badge on any row to copy the full URL to your clipboard. The badge flashes green to confirm.
+
+### Removing a short link
+
+Open the popover with the chain-link icon and click **Remove**.
+
+### Short link rules
+
+| Rule | Detail |
+|------|--------|
+| Starts with a letter or digit | No leading hyphens/underscores |
+| Lowercase only | Uppercase is auto-lowercased in the popover |
+| 1–50 characters | Letters `a–z`, digits `0–9`, `-`, `_` |
+| One code per page | Saving a new code replaces the old one |
+| Codes are unique | A code already used by another page is rejected |
+
+### Direct URL
+
+```
+https://your-host/s/my-code  →  302  →  the full page URL
+```
+
+Short link mappings are stored in `content/shortlinks.json` and survive container restarts.
 
 ---
 
@@ -118,13 +159,57 @@ Add a `meta.json` file to any folder to control how it appears on the index:
 ## Security
 
 - Security headers on all responses (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`)
-- Rate limiting (20 req/s per IP, burst 40)
+- Rate limiting (20 req/s per real client IP, burst 40)
 - No directory listing — the generated index is the only navigation
 - `meta.json` files are blocked from being served directly
 - Optional HTTP Basic Auth via `BASIC_AUTH` env var
 - Nginx version not disclosed in headers or error pages
 
 EasyHoster is designed for internal or small-team use. If you expose it publicly, use `BASIC_AUTH` or put it behind a reverse proxy that handles TLS.
+
+---
+
+## Running behind a reverse proxy (nginx-proxy)
+
+Use the included `docker-compose.nginx-proxy.yml` override when running behind [nginx-proxy](https://github.com/nginx-proxy/nginx-proxy).
+
+### One-time setup
+
+```bash
+# Create the shared network that nginx-proxy uses (once per host)
+docker network create nginx-proxy
+```
+
+### `.env` additions
+
+```env
+VIRTUAL_HOST=reports.example.com
+
+# Optional — auto-TLS with acme-companion
+# LETSENCRYPT_HOST=reports.example.com
+# LETSENCRYPT_EMAIL=you@example.com
+```
+
+### Start with the overlay
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.nginx-proxy.yml up -d --build
+```
+
+### What the overlay does
+
+| Change | Why |
+|--------|-----|
+| Adds `VIRTUAL_HOST` / `VIRTUAL_PORT` env vars to the nginx service | nginx-proxy reads these to know which hostname maps to which container |
+| Attaches the nginx container to the shared `nginx-proxy` Docker network | nginx-proxy can only route to containers it can reach on its network |
+
+### What's already handled for you
+
+- **Short link redirects** issue relative `Location` headers (`/presentations/file.html`), so the browser resolves them against the public URL — no changes needed.
+- **The copy-to-clipboard button** uses `window.location.origin` (browser-side), which already knows the public scheme and hostname — no changes needed.
+- **Rate limiting** uses the real client IP via `X-Forwarded-For` (configured in `nginx.conf`) — not the proxy's container IP.
+
+> **Note:** The `PORT` host-port mapping stays active even when behind nginx-proxy (nginx-proxy routes via the Docker network, not the published port). You can set `PORT=127.0.0.1:8080` in `.env` to restrict direct access to localhost only.
 
 ---
 
@@ -154,14 +239,17 @@ docker compose build && docker compose up -d
 ```
 easyhoster/
 ├── docker-compose.yml
+├── docker-compose.nginx-proxy.yml  ← overlay for nginx-proxy deployments
 ├── .env.example
-├── content/                  ← your HTML files go here
+├── content/                        ← your HTML files go here
+│   ├── shortlinks.json             ← short link mappings (auto-created)
 │   ├── presentations/
 │   └── reports/
 ├── generator/
-│   ├── generate.py           ← index builder + file watcher
+│   ├── generate.py                 ← index builder + file watcher
+│   ├── shortlinks_server.py        ← /s/<code> redirect + /api/shortlinks API
 │   ├── templates/
-│   │   └── index.html.j2     ← index page template
+│   │   └── index.html.j2           ← index page template
 │   └── Dockerfile
 └── nginx/
     ├── nginx.conf
