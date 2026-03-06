@@ -5,6 +5,8 @@ services:
       - ${CONTENT_DIR:-./content}:/content
     environment:
       SITE_TITLE: ${SITE_TITLE:-EasyHoster}
+    expose:
+      - "5000"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "test", "-f", "/content/index.html"]

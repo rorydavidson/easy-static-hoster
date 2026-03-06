@@ -2,6 +2,7 @@
 """
 EasyHoster generator — walks the content directory, renders index.html,
 then watches for changes and re-renders on any file event.
+Also starts the shortlinks redirect server as a daemon thread.
 """
 
 import os
@@ -9,12 +10,16 @@ import json
 import time
 import logging
 import argparse
+import threading
 from datetime import datetime
+from html.parser import HTMLParser
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler
+
+import shortlinks_server
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,12 +33,67 @@ INDEX_FILENAME = "index.html"
 HTML_SUFFIX = ".html"
 
 
+# ── HTML title extraction ─────────────────────────────────────────────────────
+
+class _TitleParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self._in_title = False
+        self.title: str | None = None
+
+    def handle_starttag(self, tag, attrs) -> None:
+        if tag.lower() == "title":
+            self._in_title = True
+
+    def handle_endtag(self, tag) -> None:
+        if tag.lower() == "title":
+            self._in_title = False
+
+    def handle_data(self, data) -> None:
+        if self._in_title and self.title is None:
+            stripped = data.strip()
+            if stripped:
+                self.title = stripped
+
+
+def extract_title(path: Path) -> str | None:
+    """Return the text content of the first <title> tag, or None."""
+    try:
+        # Only read the first 4 KB — the <title> is always in <head>
+        content = path.read_bytes()[:4096].decode("utf-8", errors="ignore")
+        parser = _TitleParser()
+        parser.feed(content)
+        return parser.title
+    except Exception:
+        return None
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
 def humanize(stem: str) -> str:
-    """'my-report_2025' → 'My Report 2025'"""
+    """'my-report_2025' → 'My Report 2025' (fallback when no <title>)"""
     return stem.replace("-", " ").replace("_", " ").title()
 
 
+def load_shortlinks(content_dir: Path) -> dict:
+    """Return the code → path mapping from shortlinks.json."""
+    path = content_dir / "shortlinks.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        log.warning("Could not parse shortlinks.json: %s", exc)
+        return {}
+
+
+# ── Index builder ─────────────────────────────────────────────────────────────
+
 def build_context(content_dir: Path, site_title: str) -> dict:
+    # Build reverse map: file path (relative) → short code
+    shortlinks = load_shortlinks(content_dir)
+    path_to_code: dict[str, str] = {v.lstrip("/"): k for k, v in shortlinks.items()}
+
     categories = []
 
     for folder in sorted(content_dir.iterdir()):
@@ -55,15 +115,19 @@ def build_context(content_dir: Path, site_title: str) -> dict:
         pages = []
         for f in sorted(folder.iterdir()):
             if f.suffix.lower() != HTML_SUFFIX:
-                continue  # skip images, meta.json, etc.
+                continue  # skip images, assets, meta.json, etc.
+
+            rel_path = f"{folder.name}/{f.name}"
             stat = f.stat()
             pages.append(
                 {
-                    "title": humanize(f.stem),
-                    "path": f"{folder.name}/{f.name}",
+                    # Prefer <title> tag; fall back to humanized filename
+                    "title": extract_title(f) or humanize(f.stem),
+                    "path": rel_path,
                     "modified": datetime.fromtimestamp(stat.st_mtime).strftime(
                         "%Y-%m-%d"
                     ),
+                    "shortlink": path_to_code.get(rel_path),
                 }
             )
 
@@ -109,6 +173,8 @@ def render_index(content_dir: Path, site_title: str) -> None:
     )
 
 
+# ── File watcher ──────────────────────────────────────────────────────────────
+
 class ContentHandler(FileSystemEventHandler):
     def __init__(self, content_dir: Path, site_title: str) -> None:
         self.content_dir = content_dir
@@ -132,6 +198,8 @@ class ContentHandler(FileSystemEventHandler):
             log.error("Rebuild failed: %s", exc)
 
 
+# ── Entry point ───────────────────────────────────────────────────────────────
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="EasyHoster index generator")
     parser.add_argument(
@@ -147,7 +215,7 @@ def main() -> None:
     parser.add_argument(
         "--once",
         action="store_true",
-        help="Generate index once and exit (no watcher)",
+        help="Generate index once and exit (no watcher, no server)",
     )
     args = parser.parse_args()
 
@@ -156,7 +224,21 @@ def main() -> None:
         log.error("Content directory not found: %s", content_dir)
         raise SystemExit(1)
 
-    log.info("EasyHoster generator starting — content: %s, title: %s", content_dir, args.title)
+    log.info(
+        "EasyHoster generator starting — content: %s, title: %s",
+        content_dir,
+        args.title,
+    )
+
+    # Start shortlinks HTTP server as a background daemon thread
+    if not args.once:
+        t = threading.Thread(
+            target=shortlinks_server.start,
+            args=(content_dir,),
+            daemon=True,
+            name="shortlinks-server",
+        )
+        t.start()
 
     render_index(content_dir, args.title)
 

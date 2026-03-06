@@ -17,6 +17,13 @@
       --accent-bg:   #f0f3ff;
       --header-bg:   #16162a;
       --header-line: rgba(255, 255, 255, 0.07);
+      --badge-bg:    #eef0f6;
+      --badge-hover: #dde1f0;
+      --badge-ok:    #d3f9d8;
+      --badge-ok-fg: #2f9e44;
+      --danger:      #e03131;
+      --danger-bg:   #fff0f0;
+      --danger-border:#ffa8a8;
     }
 
     body {
@@ -63,9 +70,7 @@
     }
 
     /* ── Category ────────────────────────────────────────────── */
-    .category {
-      margin-bottom: 2.5rem;
-    }
+    .category { margin-bottom: 2.5rem; }
 
     .category-label {
       display: flex;
@@ -82,10 +87,7 @@
       color: var(--text-muted);
     }
 
-    .category-count {
-      font-size: 0.68rem;
-      color: #c4c8d8;
-    }
+    .category-count { font-size: 0.68rem; color: #c4c8d8; }
 
     /* ── Page list ───────────────────────────────────────────── */
     .page-list {
@@ -99,42 +101,181 @@
     .page-item {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 1.5rem;
-      padding: 0.8rem 1.25rem;
-      text-decoration: none;
-      color: var(--text);
+      gap: 0.6rem;
+      padding: 0 1.25rem 0 0;
       border-bottom: 1px solid var(--border);
       transition: background 0.12s;
     }
 
-    .page-item:last-child {
-      border-bottom: none;
-    }
+    .page-item:last-child { border-bottom: none; }
+    .page-item:hover { background: var(--accent-bg); }
 
-    .page-item:hover {
-      background: var(--accent-bg);
-    }
-
-    .page-item:hover .page-name {
-      color: var(--accent);
-    }
-
+    /* Title is the primary link — takes all remaining space */
     .page-name {
+      flex: 1;
+      min-width: 0;
+      padding: 0.8rem 0 0.8rem 1.25rem;
       font-size: 0.88rem;
       font-weight: 500;
+      color: var(--text);
+      text-decoration: none;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       transition: color 0.12s;
     }
 
+    .page-item:hover .page-name { color: var(--accent); }
+
+    /* ── Short link badge (copy) ─────────────────────────────── */
+    .shortlink {
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
+      font-size: 0.7rem;
+      font-family: ui-monospace, "SF Mono", "Fira Code", monospace;
+      color: var(--text-muted);
+      background: var(--badge-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.2rem 0.45rem;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+    }
+
+    .shortlink:hover { background: var(--badge-hover); color: var(--accent); border-color: #c5ccec; }
+    .shortlink.copied { background: var(--badge-ok); color: var(--badge-ok-fg); border-color: #b2f2bb; }
+
+    /* ── Edit short link button ──────────────────────────────── */
+    .edit-link-btn {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: #d0d4e0;
+      border-radius: 4px;
+      padding: 0;
+      transition: color 0.12s, background 0.12s;
+    }
+
+    .page-item:hover .edit-link-btn { color: var(--text-muted); }
+    .edit-link-btn:hover { color: var(--accent) !important; background: var(--accent-bg); }
+    .edit-link-btn.active { color: var(--accent); background: var(--accent-bg); }
+
+    /* ── Date ────────────────────────────────────────────────── */
     .page-date {
       font-size: 0.73rem;
       color: var(--text-muted);
       white-space: nowrap;
       flex-shrink: 0;
       font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Short link popover ──────────────────────────────────── */
+    .link-popover {
+      position: fixed;
+      z-index: 200;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 0.85rem;
+      width: 230px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .link-popover.hidden { display: none; }
+
+    .popover-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 0.55rem;
+    }
+
+    .popover-input-row {
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      overflow: hidden;
+      background: var(--bg);
+      transition: border-color 0.12s;
+    }
+
+    .popover-input-row:focus-within { border-color: var(--accent); }
+
+    .popover-prefix {
+      font-family: ui-monospace, "SF Mono", "Fira Code", monospace;
+      font-size: 0.78rem;
+      padding: 0.38rem 0.2rem 0.38rem 0.55rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    .popover-input-row input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      font-family: ui-monospace, "SF Mono", "Fira Code", monospace;
+      font-size: 0.78rem;
+      padding: 0.38rem 0.55rem 0.38rem 0.1rem;
+      color: var(--text);
+      outline: none;
+      min-width: 0;
+    }
+
+    .popover-actions {
+      display: flex;
+      gap: 0.4rem;
+      margin-top: 0.5rem;
+    }
+
+    .popover-save {
+      flex: 1;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      padding: 0.38rem 0.6rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+
+    .popover-save:hover { background: #2f4cc9; }
+
+    .popover-remove {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.38rem 0.6rem;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+    }
+
+    .popover-remove:hover {
+      background: var(--danger-bg);
+      color: var(--danger);
+      border-color: var(--danger-border);
+    }
+
+    .popover-error {
+      margin-top: 0.4rem;
+      font-size: 0.72rem;
+      color: var(--danger);
+      min-height: 1.1em;
     }
 
     /* ── Empty state ─────────────────────────────────────────── */
@@ -182,10 +323,23 @@
       </div>
       <div class="page-list">
         {% for page in cat.pages %}
-        <a class="page-item" href="{{ page.path }}">
-          <span class="page-name" title="{{ page.title }}">{{ page.title }}</span>
+        <div class="page-item">
+          <a class="page-name" href="{{ page.path }}" title="{{ page.title }}">{{ page.title }}</a>
+          {% if page.shortlink %}
+          <span class="shortlink" title="Copy short link" onclick="copyShortlink(event, this, '{{ page.shortlink }}')">/s/{{ page.shortlink }}</span>
+          {% endif %}
+          <button type="button" class="edit-link-btn"
+                  data-path="{{ page.path }}"
+                  data-code="{{ page.shortlink or '' }}"
+                  title="{{ 'Edit' if page.shortlink else 'Add' }} short link"
+                  onclick="openEditor(event, this)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+            </svg>
+          </button>
           <span class="page-date">{{ page.modified }}</span>
-        </a>
+        </div>
         {% endfor %}
       </div>
     </section>
@@ -194,6 +348,148 @@
   </main>
 
   <footer>Updated {{ generated }}</footer>
+
+  <!-- Shared short link editor popover -->
+  <div id="link-popover" class="link-popover hidden" role="dialog" aria-label="Edit short link">
+    <div class="popover-label">Short link</div>
+    <div class="popover-input-row">
+      <span class="popover-prefix">/s/</span>
+      <input id="link-input" type="text" placeholder="my-code" autocomplete="off" spellcheck="false" maxlength="50">
+    </div>
+    <div class="popover-actions">
+      <button type="button" class="popover-save" onclick="saveShortlink()">Save</button>
+      <button type="button" class="popover-remove" id="link-remove" onclick="removeShortlink()">Remove</button>
+    </div>
+    <div class="popover-error" id="link-error" aria-live="polite"></div>
+  </div>
+
+  <script>
+    var _activeBtn = null;
+
+    /* ── Copy badge ─────────────────────────────────────────── */
+    function copyShortlink(event, el, code) {
+      event.preventDefault();
+      event.stopPropagation();
+      navigator.clipboard.writeText(window.location.origin + '/s/' + code).then(function () {
+        el.textContent = '✓ copied';
+        el.classList.add('copied');
+        setTimeout(function () {
+          el.textContent = '/s/' + code;
+          el.classList.remove('copied');
+        }, 1500);
+      });
+    }
+
+    /* ── Open editor ────────────────────────────────────────── */
+    function openEditor(event, btn) {
+      event.stopPropagation();
+
+      // Toggle off if same button clicked again
+      if (_activeBtn === btn) { closeEditor(); return; }
+
+      closeEditor();
+      _activeBtn = btn;
+      btn.classList.add('active');
+
+      var code = btn.dataset.code || '';
+      document.getElementById('link-input').value = code;
+      document.getElementById('link-error').textContent = '';
+      document.getElementById('link-remove').style.display = code ? '' : 'none';
+
+      var popover = document.getElementById('link-popover');
+      popover.classList.remove('hidden');
+
+      // Position below the button, clamped to viewport width
+      var rect = btn.getBoundingClientRect();
+      var top  = rect.bottom + window.scrollY + 6;
+      var left = Math.min(rect.left + window.scrollX, window.innerWidth - 240);
+      popover.style.top  = top + 'px';
+      popover.style.left = left + 'px';
+
+      document.getElementById('link-input').focus();
+      document.getElementById('link-input').select();
+    }
+
+    function closeEditor() {
+      if (_activeBtn) { _activeBtn.classList.remove('active'); _activeBtn = null; }
+      document.getElementById('link-popover').classList.add('hidden');
+      document.getElementById('link-error').textContent = '';
+    }
+
+    /* ── Save / Remove ──────────────────────────────────────── */
+    function saveShortlink() {
+      var code = document.getElementById('link-input').value.trim().toLowerCase();
+      _callApi(code);
+    }
+
+    function removeShortlink() { _callApi(''); }
+
+    function _callApi(code) {
+      if (!_activeBtn) return;
+      var path = _activeBtn.dataset.path;
+
+      document.getElementById('link-error').textContent = '';
+
+      fetch('/api/shortlinks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: path, code: code })
+      })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          document.getElementById('link-error').textContent = res.data.error || 'Error';
+          return;
+        }
+        // Update the row in-place
+        _updateRow(_activeBtn, code);
+        closeEditor();
+      })
+      .catch(function (err) {
+        document.getElementById('link-error').textContent = 'Network error';
+      });
+    }
+
+    function _updateRow(btn, code) {
+      btn.dataset.code = code;
+      btn.title = (code ? 'Edit' : 'Add') + ' short link';
+
+      var item = btn.closest('.page-item');
+      var badge = item.querySelector('.shortlink');
+
+      if (code) {
+        if (badge) {
+          badge.textContent = '/s/' + code;
+          badge.onclick = function (e) { copyShortlink(e, badge, code); };
+        } else {
+          badge = document.createElement('span');
+          badge.className = 'shortlink';
+          badge.title = 'Copy short link';
+          badge.textContent = '/s/' + code;
+          badge.onclick = function (e) { copyShortlink(e, badge, code); };
+          btn.before(badge);
+        }
+        document.getElementById('link-remove').style.display = '';
+      } else {
+        if (badge) badge.remove();
+      }
+    }
+
+    /* ── Close on outside click or Escape ───────────────────── */
+    document.addEventListener('click', function (e) {
+      var popover = document.getElementById('link-popover');
+      if (!popover.classList.contains('hidden') &&
+          !popover.contains(e.target) &&
+          !e.target.closest('.edit-link-btn')) {
+        closeEditor();
+      }
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeEditor();
+      if (e.key === 'Enter' && _activeBtn) { e.preventDefault(); saveShortlink(); }
+    });
+  </script>
 
 </body>
 </html>

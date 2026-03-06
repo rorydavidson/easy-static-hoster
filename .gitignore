@@ -6,3 +6,4 @@ content/index.html
 # Common OS files
 .DS_Store
 Thumbs.db
+*.html
