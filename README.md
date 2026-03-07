@@ -4,6 +4,8 @@ A minimal self-hosted page for serving static HTML files — presentations, repo
 
 Drop an HTML file into a folder. It appears on the index within seconds. No CMS, no database, no build step.
 
+I created this after the number of artefacts that get created by different GenAI tools (Claude, Gemini, etc) as HTML files, and realised it would be handy to have a simple way to host them that is secure. Enjoy.
+
 ---
 
 ## How it works
