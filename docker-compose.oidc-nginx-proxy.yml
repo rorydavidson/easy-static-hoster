@@ -23,6 +23,8 @@ services:
     environment:
       VIRTUAL_HOST: ${VIRTUAL_HOST:?VIRTUAL_HOST must be set}
       VIRTUAL_PORT: "4180"
+      # Tell oauth2-proxy its public callback URL (required behind a reverse proxy)
+      OAUTH2_PROXY_REDIRECT_URL: https://${VIRTUAL_HOST}/oauth2/callback
       # Uncomment for auto-TLS via acme-companion:
       # LETSENCRYPT_HOST: ${LETSENCRYPT_HOST:-}
       # LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-}

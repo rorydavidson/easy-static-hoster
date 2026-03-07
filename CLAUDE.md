@@ -8,13 +8,14 @@ Host self-contained HTML files (presentations, reports, notebooks) behind a clea
 
 ## Architecture
 
-Two or three containers managed by Docker Compose:
+Two containers in basic mode, up to four in OIDC mode:
 
 | Container       | Role                                                          |
 |-----------------|---------------------------------------------------------------|
 | `nginx`         | Serves static files and the generated index                   |
 | `generator`     | Watches content volume, rebuilds `index.html` on file changes |
 | `oauth2-proxy`  | (OIDC mode only) Handles SSO login flow, proxies to nginx     |
+| `redis`         | (OIDC mode only) Stores session data server-side to avoid cookie size limits |
 
 Shared volume (`content/`) is the only data store. Generator writes `index.html` to the root of that volume; Nginx serves everything from it.
 

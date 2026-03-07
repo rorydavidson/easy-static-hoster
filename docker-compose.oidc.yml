@@ -19,6 +19,18 @@ services:
   nginx:
     ports: !override []
 
+  # Redis stores session data server-side so the cookie stays small.
+  # Without this, users with many OIDC groups exceed the 4KB cookie
+  # limit and authentication fails behind reverse proxies.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   oauth2-proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
     command:
@@ -35,6 +47,8 @@ services:
       - --scope=openid email profile
       - --oidc-groups-claim=${OIDC_GROUPS_CLAIM:-groups}
       - --allowed-group=${OIDC_ALLOWED_GROUP:?OIDC_ALLOWED_GROUP must be set (e.g. easyhoster-users)}
+      - --session-store-type=redis
+      - --redis-connection-url=redis://redis:6379
       - --pass-user-headers=true
       - --set-xauthrequest=true
       - --skip-provider-button=true
@@ -46,4 +60,6 @@ services:
     depends_on:
       nginx:
         condition: service_started
+      redis:
+        condition: service_healthy
     restart: unless-stopped

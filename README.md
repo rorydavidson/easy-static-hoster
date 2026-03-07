@@ -8,11 +8,12 @@ Drop an HTML file into a folder. It appears on the index within seconds. No CMS,
 
 ## How it works
 
-Two Docker containers share a content directory on your host machine (a third is added in OIDC mode):
+Two Docker containers share a content directory on your host machine (two more are added in OIDC mode):
 
 - **generator** — watches the content directory and rebuilds `index.html` whenever files change
 - **nginx** — serves the index and all static files (HTML, images, CSS, etc.)
 - **oauth2-proxy** *(OIDC mode only)* — handles SSO login via Keycloak, Google, Azure AD, etc.
+- **redis** *(OIDC mode only)* — stores session data server-side so cookies stay small (required for users with many OIDC groups)
 
 The index groups pages by top-level folder (each folder = one category) and shows the last-modified date beside each page name. Empty categories appear in the index immediately with a placeholder row — no file required.
 
