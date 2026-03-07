@@ -7,3 +7,5 @@ content/index.html
 .DS_Store
 Thumbs.db
 *.html
+.vscode/
+.vscode/settings.json

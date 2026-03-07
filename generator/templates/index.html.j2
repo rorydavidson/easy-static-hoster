@@ -548,6 +548,7 @@
   <input type="file" id="upload-input" accept=".html,.png,.jpg,.jpeg,.gif,.svg,.webp,.ico" style="display:none">
   <div id="upload-toast" class="upload-toast hidden" aria-live="polite"></div>
 
+  {% if auth_mode != "oidc" %}
   <!-- Credentials modal — shown on every upload click; credentials are never cached -->
   <div id="cred-modal" class="cred-modal hidden" role="dialog" aria-modal="true" aria-label="Upload credentials">
     <div class="cred-dialog">
@@ -566,6 +567,7 @@
       </div>
     </div>
   </div>
+  {% endif %}
 
   <!-- New category modal — all fields in one step -->
   <div id="mkdir-modal" class="cred-modal hidden" role="dialog" aria-modal="true" aria-label="New category">
@@ -575,6 +577,7 @@
         <label for="mkdir-name">Category name</label>
         <input id="mkdir-name" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. reports">
       </div>
+      {% if auth_mode != "oidc" %}
       <div class="cred-field">
         <label for="mkdir-user">Username</label>
         <input id="mkdir-user" type="text" autocomplete="off" spellcheck="false">
@@ -583,6 +586,7 @@
         <label for="mkdir-pass">Password</label>
         <input id="mkdir-pass" type="password" autocomplete="new-password">
       </div>
+      {% endif %}
       <div class="mkdir-error" id="mkdir-error" aria-live="polite"></div>
       <div class="cred-actions">
         <button type="button" class="cred-confirm" onclick="mkdirConfirm()">Create</button>
@@ -607,17 +611,38 @@
 
   <script>
     var _activeBtn = null;
+    var _authMode = '{{ auth_mode }}';
 
     /* ── Upload ─────────────────────────────────────────────── */
     var _uploadFolder = null;
 
     function triggerUpload(folder) {
       _uploadFolder = folder;
-      // Show credentials dialog — user must enter credentials on every upload
+
+      if (_authMode === 'oidc') {
+        // OIDC: oauth2-proxy session handles auth — go straight to file picker
+        _openFilePicker(folder, null);
+        return;
+      }
+
+      // Basic Auth: show credentials dialog
       document.getElementById('cred-user').value = '';
       document.getElementById('cred-pass').value = '';
       document.getElementById('cred-modal').classList.remove('hidden');
       document.getElementById('cred-user').focus();
+    }
+
+    function _openFilePicker(folder, creds) {
+      _uploadFolder = null;
+      var input = document.getElementById('upload-input');
+      function handleFile(e) {
+        input.removeEventListener('change', handleFile);
+        var file = e.target.files[0];
+        e.target.value = '';
+        if (file) _doUpload(folder, file, creds);
+      }
+      input.addEventListener('change', handleFile);
+      input.click();
     }
 
     function credConfirm() {
@@ -625,7 +650,6 @@
       var pass = document.getElementById('cred-pass').value;
       if (!user || !pass) return;
 
-      // Capture folder and creds in a closure — no module-level creds state
       var folder = _uploadFolder;
       var creds;
       try {
@@ -634,20 +658,8 @@
         _showUploadToast('Credentials must only contain ASCII characters', 'error');
         return;
       }
-      _uploadFolder = null;
       document.getElementById('cred-modal').classList.add('hidden');
-
-      // One-shot change listener: removes itself after firing so repeated uploads
-      // each get a fresh handler with their own captured folder/creds values.
-      var input = document.getElementById('upload-input');
-      function handleFile(e) {
-        input.removeEventListener('change', handleFile);
-        var file = e.target.files[0];
-        e.target.value = '';           // reset so the same file can be re-uploaded
-        if (file) _doUpload(folder, file, creds);
-      }
-      input.addEventListener('change', handleFile);
-      input.click();
+      _openFilePicker(folder, creds);
     }
 
     function credCancel() {
@@ -658,34 +670,40 @@
     /* ── New category ────────────────────────────────────────── */
     function triggerMkdir() {
       document.getElementById('mkdir-name').value = '';
-      document.getElementById('mkdir-user').value = '';
-      document.getElementById('mkdir-pass').value = '';
       document.getElementById('mkdir-error').textContent = '';
+      if (_authMode !== 'oidc') {
+        document.getElementById('mkdir-user').value = '';
+        document.getElementById('mkdir-pass').value = '';
+      }
       document.getElementById('mkdir-modal').classList.remove('hidden');
       document.getElementById('mkdir-name').focus();
     }
 
     function mkdirConfirm() {
       var name  = document.getElementById('mkdir-name').value.trim();
-      var user  = document.getElementById('mkdir-user').value.trim();
-      var pass  = document.getElementById('mkdir-pass').value;
       var errEl = document.getElementById('mkdir-error');
-      if (!name)        { errEl.textContent = 'Category name is required'; return; }
-      if (!user || !pass) { errEl.textContent = 'Credentials are required'; return; }
-      var creds;
-      try {
-        creds = btoa(user + ':' + pass);
-      } catch (err) {
-        errEl.textContent = 'Credentials must only contain ASCII characters';
-        return;
+      if (!name) { errEl.textContent = 'Category name is required'; return; }
+
+      var headers = { 'X-Folder': encodeURIComponent(name) };
+
+      if (_authMode !== 'oidc') {
+        var user = document.getElementById('mkdir-user').value.trim();
+        var pass = document.getElementById('mkdir-pass').value;
+        if (!user || !pass) { errEl.textContent = 'Credentials are required'; return; }
+        var creds;
+        try {
+          creds = btoa(user + ':' + pass);
+        } catch (err) {
+          errEl.textContent = 'Credentials must only contain ASCII characters';
+          return;
+        }
+        headers['Authorization'] = 'Basic ' + creds;
       }
+
       errEl.textContent = '';
       fetch('/api/mkdir', {
         method: 'POST',
-        headers: {
-          'X-Folder':      encodeURIComponent(name),
-          'Authorization': 'Basic ' + creds,
-        },
+        headers: headers,
       })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
@@ -710,14 +728,18 @@
       var filename = file.name;
       _showUploadToast('Uploading ' + filename + '\u2026', 'pending');
 
+      var headers = {
+        'Content-Type':  'application/octet-stream',
+        'X-Folder':      folder,
+        'X-Filename':    encodeURIComponent(filename),
+      };
+      if (creds) {
+        headers['Authorization'] = 'Basic ' + creds;
+      }
+
       fetch('/api/upload', {
         method:  'POST',
-        headers: {
-          'Content-Type':  'application/octet-stream',
-          'X-Folder':      folder,
-          'X-Filename':    encodeURIComponent(filename),
-          'Authorization': 'Basic ' + creds,
-        },
+        headers: headers,
         body: file,
       })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })

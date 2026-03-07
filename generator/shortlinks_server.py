@@ -25,8 +25,11 @@ PORT = 5000
 
 UPLOAD_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 
-# Upload is only active when HTTP Basic Auth is configured (BASIC_AUTH env var).
-_UPLOAD_ENABLED = bool(os.environ.get("BASIC_AUTH", "").strip())
+# OIDC mode: oauth2-proxy handles authentication; uploads trust forwarded headers.
+_OIDC_MODE = bool(os.environ.get("OIDC_ISSUER_URL", "").strip())
+
+# Upload is active when either Basic Auth or OIDC is configured.
+_UPLOAD_ENABLED = _OIDC_MODE or bool(os.environ.get("BASIC_AUTH", "").strip())
 
 # Allowed short codes: lowercase letters, digits, hyphens, underscores. 1–50 chars.
 _CODE_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,49}$")
@@ -59,7 +62,17 @@ def save_shortlinks(links: dict) -> None:
 
 
 def _check_upload_auth() -> bool:
-    """Return True if the Authorization header matches BASIC_AUTH exactly."""
+    """Return True if the request is authenticated.
+
+    In OIDC mode, oauth2-proxy has already validated the session; we just
+    verify that the forwarded-user header is present (set by the proxy).
+    In Basic Auth mode, the Authorization header is checked as before.
+    """
+    if _OIDC_MODE:
+        return bool(
+            request.headers.get("X-Forwarded-User")
+            or request.headers.get("X-Forwarded-Email")
+        )
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Basic "):
         return False

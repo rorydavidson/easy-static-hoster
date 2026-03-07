@@ -11,7 +11,16 @@ set -e
 #
 #   (unset)                            → site fully public, no upload button.
 
-if [ -n "$BASIC_AUTH" ]; then
+# OIDC mode: oauth2-proxy handles auth; skip Basic Auth setup entirely.
+if [ -n "$OIDC_ISSUER_URL" ]; then
+    if [ -n "$BASIC_AUTH" ]; then
+        echo "ERROR: BASIC_AUTH and OIDC_ISSUER_URL are mutually exclusive" >&2
+        exit 1
+    fi
+    echo "" > /etc/nginx/global_auth.conf
+    echo "OIDC mode: authentication handled by oauth2-proxy"
+
+elif [ -n "$BASIC_AUTH" ]; then
     USER=$(echo "$BASIC_AUTH" | cut -d: -f1)
     PASS=$(echo "$BASIC_AUTH" | cut -d: -f2-)
 

@@ -8,12 +8,13 @@ Host self-contained HTML files (presentations, reports, notebooks) behind a clea
 
 ## Architecture
 
-Two containers managed by Docker Compose:
+Two or three containers managed by Docker Compose:
 
-| Container   | Role                                                          |
-|-------------|---------------------------------------------------------------|
-| `nginx`     | Serves static files and the generated index                   |
-| `generator` | Watches content volume, rebuilds `index.html` on file changes |
+| Container       | Role                                                          |
+|-----------------|---------------------------------------------------------------|
+| `nginx`         | Serves static files and the generated index                   |
+| `generator`     | Watches content volume, rebuilds `index.html` on file changes |
+| `oauth2-proxy`  | (OIDC mode only) Handles SSO login flow, proxies to nginx     |
 
 Shared volume (`content/`) is the only data store. Generator writes `index.html` to the root of that volume; Nginx serves everything from it.
 
@@ -32,6 +33,8 @@ content/
 ## Key Files
 
 - `docker-compose.yml` — orchestration, env vars, volume mounts
+- `docker-compose.oidc.yml` — OIDC overlay: adds oauth2-proxy, hides nginx port
+- `docker-compose.oidc-nginx-proxy.yml` — combined OIDC + nginx-proxy overlay
 - `nginx/nginx.conf` — security headers, rate limiting, file serving rules
 - `nginx/Dockerfile` — minimal nginx:alpine image, non-root user
 - `generator/generate.py` — directory walker + Jinja2 renderer + watchdog watcher
@@ -58,17 +61,27 @@ CONTENT_DIR=./content SITE_TITLE="My Reports" docker compose up
 # Production (external content dir, detached)
 CONTENT_DIR=/data/reports SITE_TITLE="Reports" docker compose up -d
 
+# OIDC / SSO mode (Keycloak, Google, Azure AD, etc.)
+docker compose -f docker-compose.yml -f docker-compose.oidc.yml up -d
+
 # Rebuild after code changes
 docker compose build && docker compose up -d
 ```
 
 ## Environment Variables
 
-| Variable       | Default         | Description                        |
-|----------------|-----------------|------------------------------------|
-| `CONTENT_DIR`  | `./content`     | Host path to the content directory |
-| `SITE_TITLE`   | `EasyHoster`    | Displayed in the index page title  |
-| `BASIC_AUTH`   | (unset)         | Set to `user:password` to enable HTTP Basic Auth |
+| Variable             | Default         | Description                                      |
+|----------------------|-----------------|--------------------------------------------------|
+| `CONTENT_DIR`        | `./content`     | Host path to the content directory               |
+| `SITE_TITLE`         | `EasyHoster`    | Displayed in the index page title                |
+| `BASIC_AUTH`         | (unset)         | Set to `user:password` to enable HTTP Basic Auth |
+| `OIDC_ISSUER_URL`   | (unset)         | OIDC provider URL (e.g. Keycloak realm URL)      |
+| `OIDC_CLIENT_ID`    | (unset)         | OIDC client ID registered with provider          |
+| `OIDC_CLIENT_SECRET` | (unset)        | OIDC client secret                               |
+| `COOKIE_SECRET`      | (unset)        | Session cookie encryption key (`openssl rand -base64 24`) |
+| `OIDC_COOKIE_SECURE` | `false`        | Set `true` when behind TLS                       |
+| `OIDC_ALLOWED_GROUP` | (unset)        | Required OIDC group for access (e.g. `easyhoster-users`) |
+| `OIDC_GROUPS_CLAIM`  | `groups`       | JWT claim containing group membership list       |
 
 ## Security Posture
 
@@ -80,6 +93,28 @@ docker compose build && docker compose up -d
 - No directory listing — only the generated `index.html` serves as navigation
 - Only `.html` files are linked from the index; Nginx still serves any valid file path (for assets referenced by HTML files)
 - Optional Basic Auth gates the entire site with a single env var
+- Optional OIDC/SSO auth via oauth2-proxy (Keycloak, Google, Azure AD, any OIDC provider)
+- `BASIC_AUTH` and `OIDC_ISSUER_URL` are mutually exclusive — setting both is an error
+
+## Authentication Modes
+
+Three mutually exclusive modes, controlled by environment variables:
+
+| Mode | Env vars | Behaviour |
+|------|----------|-----------|
+| **No auth** | Neither `BASIC_AUTH` nor `OIDC_ISSUER_URL` | Site fully public, no upload UI |
+| **Basic Auth** | `BASIC_AUTH=user:pass` (optionally `AUTH_GLOBAL=true`) | Upload requires credentials; optionally locks entire site |
+| **OIDC** | `OIDC_ISSUER_URL` + client vars + `OIDC_ALLOWED_GROUP` | oauth2-proxy handles login; only users in the allowed group can access the site and upload |
+
+### OIDC Setup
+
+1. Register a client in your OIDC provider (e.g. Keycloak realm → Clients → Create)
+2. Set the redirect URI to `http(s)://<your-host>/oauth2/callback`
+3. Copy client ID and secret to `.env`
+4. Generate a cookie secret: `openssl rand -base64 24`
+5. Start with the OIDC overlay: `docker compose -f docker-compose.yml -f docker-compose.oidc.yml up -d`
+
+In OIDC mode, nginx is not exposed to the host — all traffic goes through oauth2-proxy on the configured `PORT` (default 4180). The credential modal is not shown; uploads rely on the OIDC session.
 
 ## Development Notes
 

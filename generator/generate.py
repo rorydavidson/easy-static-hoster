@@ -159,9 +159,17 @@ def build_context(content_dir: Path, site_title: str) -> dict:
         "categories": categories,
         "total_pages": total_pages,
         "generated": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        # Upload button is shown only when BASIC_AUTH is configured, so that
-        # the endpoint is always protected by nginx's HTTP Basic Auth.
-        "upload_enabled": bool(os.environ.get("BASIC_AUTH", "").strip()),
+        # Upload button is shown when any auth mechanism is configured.
+        "upload_enabled": bool(
+            os.environ.get("BASIC_AUTH", "").strip()
+            or os.environ.get("OIDC_ISSUER_URL", "").strip()
+        ),
+        # Auth mode determines UI behaviour (credential modal vs session auth).
+        "auth_mode": (
+            "oidc" if os.environ.get("OIDC_ISSUER_URL", "").strip()
+            else "basic" if os.environ.get("BASIC_AUTH", "").strip()
+            else "none"
+        ),
     }
 
 

@@ -6,6 +6,7 @@ services:
     environment:
       SITE_TITLE: ${SITE_TITLE:-EasyHoster}
       BASIC_AUTH: ${BASIC_AUTH:-}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
     expose:
       - "5000"
     restart: unless-stopped
@@ -25,6 +26,7 @@ services:
     environment:
       BASIC_AUTH: ${BASIC_AUTH:-}
       AUTH_GLOBAL: ${AUTH_GLOBAL:-}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
     depends_on:
       generator:
         condition: service_healthy

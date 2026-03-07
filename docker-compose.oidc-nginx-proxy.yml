@@ -1,0 +1,33 @@
+# OIDC + nginx-proxy overlay — combines SSO auth with nginx-proxy routing
+#
+# Usage:
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.oidc.yml \
+#                  -f docker-compose.oidc-nginx-proxy.yml up -d
+#
+# Required env vars (add to .env):
+#   OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, COOKIE_SECRET
+#   VIRTUAL_HOST=reports.example.com
+#
+# This overlay moves the nginx-proxy routing from nginx to oauth2-proxy,
+# so that external traffic hits oauth2-proxy first (for OIDC login), which
+# then proxies authenticated requests to nginx internally.
+
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-nginx-proxy}
+
+services:
+  oauth2-proxy:
+    environment:
+      VIRTUAL_HOST: ${VIRTUAL_HOST:?VIRTUAL_HOST must be set}
+      VIRTUAL_PORT: "4180"
+      # Uncomment for auto-TLS via acme-companion:
+      # LETSENCRYPT_HOST: ${LETSENCRYPT_HOST:-}
+      # LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-}
+    # No published port — nginx-proxy routes via Docker network
+    ports: !override []
+    networks:
+      - default
+      - proxy
