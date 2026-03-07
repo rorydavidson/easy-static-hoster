@@ -6,6 +6,7 @@ services:
       - ${CONTENT_DIR:-./content}:/content
     environment:
       SITE_TITLE: ${SITE_TITLE:-EasyHoster}
+      HEADER_COLOR: ${HEADER_COLOR:-}
       BASIC_AUTH: ${BASIC_AUTH:-}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
     expose:

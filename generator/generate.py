@@ -170,6 +170,7 @@ def build_context(content_dir: Path, site_title: str) -> dict:
             else "basic" if os.environ.get("BASIC_AUTH", "").strip()
             else "none"
         ),
+        "header_color": os.environ.get("HEADER_COLOR", "").strip(),
     }
 
 
