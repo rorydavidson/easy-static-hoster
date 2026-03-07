@@ -172,6 +172,9 @@ def build_context(content_dir: Path, site_title: str) -> dict:
         ),
         "header_color": os.environ.get("HEADER_COLOR", "").strip(),
         "open_new_tab": os.environ.get("OPEN_NEW_TAB", "true").strip().lower() != "false",
+        # OIDC vars — used to build the provider logout URL in the template
+        "oidc_issuer_url": os.environ.get("OIDC_ISSUER_URL", "").strip().rstrip("/"),
+        "oidc_client_id": os.environ.get("OIDC_CLIENT_ID", "").strip(),
     }
 
 

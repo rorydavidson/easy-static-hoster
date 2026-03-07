@@ -43,6 +43,8 @@ services:
       - --cookie-secret=${COOKIE_SECRET:?COOKIE_SECRET must be set (openssl rand -base64 24)}
       - --cookie-secure=${OIDC_COOKIE_SECURE:-false}
       - --cookie-name=_easyhoster_oidc
+      - --cookie-expire=8h
+      - --cookie-refresh=1m
       - --email-domain=*
       - --scope=openid email profile
       - --oidc-groups-claim=${OIDC_GROUPS_CLAIM:-groups}
