@@ -1,5 +1,6 @@
 services:
   generator:
+    image: rorydavidson/easy-static-hoster-generator:latest
     build: ./generator
     volumes:
       - ${CONTENT_DIR:-./content}:/content
@@ -18,6 +19,7 @@ services:
       start_period: 5s
 
   nginx:
+    image: rorydavidson/easy-static-hoster-nginx:latest
     build: ./nginx
     ports:
       - "${PORT:-8080}:8080"

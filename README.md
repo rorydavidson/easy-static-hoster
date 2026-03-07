@@ -37,6 +37,17 @@ docker compose up --build
 
 Open [http://localhost:8080](http://localhost:8080). You'll see the example pages included in `content/`.
 
+### Using pre-built images
+
+Pre-built images are published to Docker Hub on every push to `main`:
+
+```bash
+docker compose pull   # pulls rorydavidson/easy-static-hoster-nginx and -generator
+docker compose up -d
+```
+
+No `--build` needed — Compose will use the pulled images directly. To build from source instead, use `docker compose up --build`.
+
 ---
 
 ## Adding your own pages
