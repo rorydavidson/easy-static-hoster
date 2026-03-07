@@ -84,6 +84,55 @@
       padding: 2.75rem 2rem;
     }
 
+    /* ── Search ──────────────────────────────────────────────── */
+    .search-bar {
+      padding: 0.75rem 1.75rem;
+      background: var(--bg);
+    }
+
+    .search-wrap {
+      position: relative;
+      max-width: 420px;
+    }
+
+    .search-wrap svg {
+      position: absolute;
+      left: 0.75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 0.55rem 0.75rem 0.55rem 2.25rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-family: inherit;
+      background: var(--surface);
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent);
+    }
+
+    .search-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .search-no-results {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      display: none;
+    }
+
     /* ── Category ────────────────────────────────────────────── */
     .category { margin-bottom: 2.5rem; }
 
@@ -516,6 +565,17 @@
     {% endif %}
   </header>
 
+  {% if categories %}
+  <div class="search-bar">
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" class="search-input" id="search-input" placeholder="Filter pages\u2026" autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="search-no-results" id="search-no-results">No pages match your search.</div>
+
   <main>
     {% if not categories %}
     <div class="empty">
@@ -912,13 +972,71 @@
     document.addEventListener('keydown', function (e) {
       var credOpen  = !document.getElementById('cred-modal').classList.contains('hidden');
       var mkdirOpen = !document.getElementById('mkdir-modal').classList.contains('hidden');
-      if (e.key === 'Escape') { closeEditor(); credCancel(); mkdirCancel(); }
+      if (e.key === 'Escape') { closeEditor(); credCancel(); mkdirCancel(); _clearSearch(); }
       if (e.key === 'Enter') {
         if (credOpen)       { e.preventDefault(); credConfirm(); }
         else if (mkdirOpen) { e.preventDefault(); mkdirConfirm(); }
         else if (_activeBtn){ e.preventDefault(); saveShortlink(); }
       }
     });
+
+    /* ── Search / Filter ───────────────────────────────────────── */
+    (function () {
+      var input = document.getElementById('search-input');
+      if (!input) return;
+
+      var noResults = document.getElementById('search-no-results');
+      var categories = document.querySelectorAll('.category');
+
+      input.addEventListener('input', function () {
+        var q = input.value.trim().toLowerCase();
+        if (!q) { _resetFilter(); return; }
+
+        var anyVisible = false;
+
+        categories.forEach(function (cat) {
+          var items = cat.querySelectorAll('.page-item');
+          var catVisible = false;
+
+          items.forEach(function (item) {
+            var name = item.querySelector('.page-name');
+            var text = (name ? name.textContent : '').toLowerCase();
+            var match = text.indexOf(q) !== -1;
+            item.style.display = match ? '' : 'none';
+            if (match) catVisible = true;
+          });
+
+          // Also match category name itself
+          var catLabel = cat.querySelector('.category-name');
+          if (catLabel && catLabel.textContent.toLowerCase().indexOf(q) !== -1) {
+            catVisible = true;
+            items.forEach(function (item) { item.style.display = ''; });
+          }
+
+          cat.style.display = catVisible ? '' : 'none';
+          if (catVisible) anyVisible = true;
+        });
+
+        noResults.style.display = anyVisible ? 'none' : 'block';
+      });
+
+      function _resetFilter() {
+        categories.forEach(function (cat) {
+          cat.style.display = '';
+          cat.querySelectorAll('.page-item').forEach(function (item) {
+            item.style.display = '';
+          });
+        });
+        noResults.style.display = 'none';
+      }
+
+      // Expose for Escape key handler
+      window._clearSearch = function () {
+        if (input.value) { input.value = ''; _resetFilter(); }
+      };
+    })();
+
+    if (typeof _clearSearch === 'undefined') { var _clearSearch = function () {}; }
   </script>
 
 </body>
