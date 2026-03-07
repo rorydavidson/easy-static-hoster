@@ -171,6 +171,7 @@ def build_context(content_dir: Path, site_title: str) -> dict:
             else "none"
         ),
         "header_color": os.environ.get("HEADER_COLOR", "").strip(),
+        "open_new_tab": os.environ.get("OPEN_NEW_TAB", "true").strip().lower() != "false",
     }
 
 

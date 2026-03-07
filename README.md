@@ -169,6 +169,7 @@ cp .env.example .env
 | `CONTENT_DIR`  | `./content`   | Path to your content directory on the host         |
 | `SITE_TITLE`   | `EasyHoster`  | Title shown in the index header                    |
 | `HEADER_COLOR` | `#16162a`     | Header background colour — any CSS colour value (e.g. `#2e7d32`, `darkslateblue`) |
+| `OPEN_NEW_TAB` | `true`        | Open page links in a new tab — set to `false` to open in the same tab |
 | `PORT`         | `8080`        | Host port to expose                                |
 | `BASIC_AUTH`   | *(unset)*     | Credentials for upload — set to `username:password`. Also enables the upload and new-category buttons. |
 | `AUTH_GLOBAL`  | *(unset)*     | Set to `true` to lock the **entire site** with the same credentials (requires `BASIC_AUTH`). |

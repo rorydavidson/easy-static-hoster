@@ -76,6 +76,7 @@ docker compose build && docker compose up -d
 | `CONTENT_DIR`        | `./content`     | Host path to the content directory               |
 | `SITE_TITLE`         | `EasyHoster`    | Displayed in the index page title                |
 | `HEADER_COLOR`       | `#16162a`       | Header/navbar background colour (any CSS colour) |
+| `OPEN_NEW_TAB`       | `true`          | Open page links in a new tab (`false` to open in same tab) |
 | `BASIC_AUTH`         | (unset)         | Set to `user:password` to enable HTTP Basic Auth |
 | `OIDC_ISSUER_URL`   | (unset)         | OIDC provider URL (e.g. Keycloak realm URL)      |
 | `OIDC_CLIENT_ID`    | (unset)         | OIDC client ID registered with provider          |
