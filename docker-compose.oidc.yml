@@ -51,10 +51,15 @@ services:
       - --redis-connection-url=redis://redis:6379
       - --pass-user-headers=true
       - --set-xauthrequest=true
-      - --skip-provider-button=true
+      - --skip-provider-button=false
+      - --custom-sign-in-logo=-
+      - --banner=${SITE_TITLE:-EasyHoster}
+      - --custom-templates-dir=/templates
       - --insecure-oidc-allow-unverified-email=true
       - --reverse-proxy=true
       - --silence-ping-logging=true
+    volumes:
+      - ./oauth2-proxy:/templates:ro
     ports:
       - "${PORT:-4180}:4180"
     depends_on:

@@ -41,6 +41,7 @@ content/
 - `generator/generate.py` — directory walker + Jinja2 renderer + watchdog watcher
 - `generator/templates/index.html.j2` — index page template (no external deps)
 - `generator/requirements.txt` — watchdog, jinja2 (keep minimal)
+- `oauth2-proxy/sign_in.html` — branded OIDC sign-in page (Go template)
 
 ## Content Rules
 

@@ -329,7 +329,7 @@ Use the `docker-compose.oidc.yml` overlay to protect the entire site with an OID
 
 ### How it works
 
-An [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) container sits in front of nginx. Unauthenticated users are redirected to your OIDC provider to log in. After login, oauth2-proxy checks that the user belongs to the required group (`OIDC_ALLOWED_GROUP`) and proxies requests to nginx with the user's identity in `X-Forwarded-User` / `X-Forwarded-Email` headers. Users who authenticate but are not in the allowed group are denied access. Upload and category creation work without a credential prompt — the SSO session handles auth.
+An [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) container sits in front of nginx. Unauthenticated users see a branded sign-in page with the site logo and a **Sign in** button. Clicking it redirects to your OIDC provider to log in. After login, oauth2-proxy checks that the user belongs to the required group (`OIDC_ALLOWED_GROUP`) and proxies requests to nginx with the user's identity in `X-Forwarded-User` / `X-Forwarded-Email` headers. Users who authenticate but are not in the allowed group are denied access. Upload and category creation work without a credential prompt — the SSO session handles auth.
 
 ### Provider setup (Keycloak example)
 
@@ -433,8 +433,11 @@ easyhoster/
 │   ├── templates/
 │   │   └── index.html.j2           ← index page template
 │   └── Dockerfile
-└── nginx/
-    ├── nginx.conf
-    ├── entrypoint.sh               ← writes auth config, starts nginx
-    └── Dockerfile
+├── nginx/
+│   ├── nginx.conf
+│   ├── favicon.ico                 ← baked into the image
+│   ├── entrypoint.sh               ← writes auth config, starts nginx
+│   └── Dockerfile
+└── oauth2-proxy/
+    └── sign_in.html                ← branded OIDC sign-in page template
 ```
