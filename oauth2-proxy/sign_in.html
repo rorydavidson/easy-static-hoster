@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <title>Sign in</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #f6f7f9;
+      --surface:   #ffffff;
+      --border:    #e4e7ed;
+      --text:      #1c1c28;
+      --text-muted:#8a90a8;
+      --accent:    #3b5bdb;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2.5rem 2rem;
+      width: 340px;
+      max-width: 90vw;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      text-align: center;
+    }
+
+    .logo-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.65rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .logo {
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+    }
+
+    .site-name {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+
+    .subtitle {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      margin-bottom: 2rem;
+      line-height: 1.5;
+    }
+
+    .sign-in-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      width: 100%;
+      padding: 0.75rem 1.25rem;
+      border: none;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.9rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      text-decoration: none;
+    }
+
+    .sign-in-btn:hover {
+      background: #2b4bc6;
+    }
+
+    .sign-in-btn:active {
+      transform: scale(0.98);
+    }
+
+    .sign-in-btn svg {
+      flex-shrink: 0;
+    }
+
+    footer {
+      margin-top: 2rem;
+      font-size: 0.71rem;
+      color: #c4c8d8;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div class="logo-wrap">
+      <svg class="logo" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="4" y="18" width="56" height="40" rx="4" fill="#3b5bdb"/>
+        <rect x="4" y="18" width="56" height="40" rx="4" fill="url(#g)" opacity="0.35"/>
+        <path d="M4 14a4 4 0 0 1 4-4h14l5 8H8a4 4 0 0 0-4 4v-8z" fill="#5c7cfa"/>
+        <path d="M24 50l-8-11 8-11" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+        <path d="M40 50l8-11-8-11" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+        <line x1="35" y1="27" x2="29" y2="51" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+        <defs><linearGradient id="g" x1="32" y1="18" x2="32" y2="58"><stop stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
+      </svg>
+      <span class="site-name">{{.SignInMessage}}</span>
+    </div>
+
+    <p class="subtitle">Sign in to continue</p>
+
+    <form method="GET" action="{{.ProxyPrefix}}/start">
+      <input type="hidden" name="rd" value="{{.Redirect}}">
+      <button type="submit" class="sign-in-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        Sign in
+      </button>
+    </form>
+  </div>
+
+  <footer>Protected by single sign-on</footer>
+
+</body>
+</html>
