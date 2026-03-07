@@ -746,9 +746,11 @@
       fetch('/oauth2/sign_out', { redirect: 'manual' }).finally(function () {
         // 2. Redirect to the OIDC provider's logout endpoint so the
         //    provider session is also terminated (RP-Initiated Logout).
+        //    We omit post_logout_redirect_uri because that requires
+        //    id_token_hint which we don't have from the browser.
+        //    The provider will show its own "logged out" page.
         var logoutUrl = '{{ oidc_issuer_url }}' + '/protocol/openid-connect/logout'
-          + '?client_id=' + encodeURIComponent('{{ oidc_client_id }}')
-          + '&post_logout_redirect_uri=' + encodeURIComponent(window.location.origin);
+          + '?client_id=' + encodeURIComponent('{{ oidc_client_id }}');
         window.location.href = logoutUrl;
       });
     }
