@@ -5,7 +5,26 @@ on:
     branches: [main]
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r generator/requirements.txt
+
+      - name: Run tests
+        working-directory: generator
+        run: python -m pytest tests/ -v
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     strategy:
       matrix:
