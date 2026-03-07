@@ -9,3 +9,8 @@ Thumbs.db
 *.html
 .vscode/
 .vscode/settings.json
+
+.venv/
+__pycache__/
+.pytest_cache/
+.coverage

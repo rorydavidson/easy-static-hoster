@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import quote, unquote
 
 from flask import Flask, request, jsonify, redirect, Response
+from markupsafe import escape
 
 log = logging.getLogger(__name__)
 
@@ -83,13 +84,17 @@ def _check_upload_auth() -> bool:
     return decoded == os.environ.get("BASIC_AUTH", "")
 
 
-@app.route('/s/<code>', methods=['GET'])
+@app.route('/s/', defaults={'code': ''})
+@app.route('/s/<path:code>', methods=['GET'])
 def redirect_shortlink(code):
     links = load_shortlinks()
     target = links.get(code)
 
     if not target:
-        return f"Short link '{code}' not found", 404
+        from flask import make_response
+        resp = make_response(f"Short link '{escape(code)}' not found", 404)
+        resp.headers["Content-Type"] = "text/html; charset=utf-8"
+        return resp
 
     # URL-encode so non-ASCII chars are safe to send in a Latin-1 HTTP header.
     location = target if target.startswith("/") else f"/{target}"
@@ -203,13 +208,19 @@ def handle_mkdir():
         return jsonify({"error": "invalid credentials"}), 401
 
     raw_name = unquote(request.headers.get("X-Folder", "").strip())
+    # Explicitly prevent slashes or backslashes in category creation
+    if "/" in raw_name or "\\" in raw_name:
+        return jsonify({"error": "invalid category name"}), 400
+
     folder_name = os.path.basename(raw_name)   # strip any path components
     if not folder_name or folder_name.startswith(".") or len(folder_name) > 100:
         return jsonify({"error": "invalid category name"}), 400
 
     folder_path = CONTENT_DIR / folder_name
     try:
-        if not folder_path.resolve().as_posix().startswith(CONTENT_DIR.resolve().as_posix()):
+        # Prevent path traversal (e.g., ../hacked) by parsing safely
+        resolved = folder_path.resolve()
+        if not str(resolved).startswith(str(CONTENT_DIR.resolve())):
             return jsonify({"error": "invalid category name"}), 400
     except Exception:
         return jsonify({"error": "invalid category name"}), 400
@@ -240,5 +251,6 @@ def start(content_dir: Path | None = None) -> None:
         except Exception as exc:
             log.warning("Could not create shortlinks.json: %s", exc)
 
-    log.info("Shortlinks server starting on port %d", PORT)
-    app.run(host="0.0.0.0", port=PORT)
+    log.info("Shortlinks server starting on port %d with waitress", PORT)
+    from waitress import serve
+    serve(app, host="0.0.0.0", port=PORT)
