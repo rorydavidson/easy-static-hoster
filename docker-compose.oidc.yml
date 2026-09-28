@@ -18,6 +18,10 @@ services:
   # Remove nginx's host port — traffic must go through oauth2-proxy
   nginx:
     ports: !override []
+    environment:
+      # Only oauth2-proxy (and any proxy in front of it) can reach nginx, so
+      # the private Docker ranges can be trusted to report the client IP.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
 
   # Redis stores session data server-side so the cookie stays small.
   # Without this, users with many OIDC groups exceed the 4KB cookie

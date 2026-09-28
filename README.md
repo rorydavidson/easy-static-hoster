@@ -175,6 +175,7 @@ cp .env.example .env
 | `PORT`         | `8080`        | Host port to expose                                |
 | `BASIC_AUTH`   | *(unset)*     | Credentials for upload — set to `username:password`. Also enables the upload and new-category buttons. |
 | `AUTH_GLOBAL`  | *(unset)*     | Set to `true` to lock the **entire site** with the same credentials (requires `BASIC_AUTH`). |
+| `TRUSTED_PROXIES` | *(unset)*  | Comma-separated CIDRs of reverse proxies allowed to set the client IP via `X-Forwarded-For`. Leave unset when nginx is exposed directly. The OIDC and nginx-proxy overlays default it to the private Docker ranges. |
 
 **OIDC variables** (used with `docker-compose.oidc.yml` — mutually exclusive with `BASIC_AUTH`):
 
@@ -318,9 +319,9 @@ docker compose -f docker-compose.yml -f docker-compose.nginx-proxy.yml up -d --b
 
 - **Short link redirects** issue relative `Location` headers (`/presentations/file.html`), so the browser resolves them against the public URL — no changes needed.
 - **The copy-to-clipboard button** uses `window.location.origin` (browser-side), which already knows the public scheme and hostname — no changes needed.
-- **Rate limiting** uses the real client IP via `X-Forwarded-For` (configured in `nginx.conf`) — not the proxy's container IP.
+- **Rate limiting** uses the real client IP via `X-Forwarded-For` — not the proxy's container IP. The overlay sets `TRUSTED_PROXIES` to the private Docker ranges so nginx accepts that header from nginx-proxy; override it in `.env` if your proxy lives elsewhere.
 
-> **Note:** The `PORT` host-port mapping stays active even when behind nginx-proxy (nginx-proxy routes via the Docker network, not the published port). You can set `PORT=127.0.0.1:8080` in `.env` to restrict direct access to localhost only.
+> **Note:** The `PORT` host-port mapping stays active even when behind nginx-proxy (nginx-proxy routes via the Docker network, not the published port). Set `PORT=127.0.0.1:8080` in `.env` to restrict direct access to localhost only. This matters because the published port may present clients with a private Docker gateway IP, which `TRUSTED_PROXIES` trusts.
 
 ---
 

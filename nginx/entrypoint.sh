@@ -11,6 +11,22 @@ set -e
 #
 #   (unset)                            → site fully public, no upload button.
 
+# TRUSTED_PROXIES: comma- or space-separated CIDRs of reverse proxies allowed
+# to set X-Forwarded-For. Leave empty when clients connect to nginx directly.
+: > /etc/nginx/real_ip.conf
+if [ -n "$TRUSTED_PROXIES" ]; then
+    for cidr in $(echo "$TRUSTED_PROXIES" | tr ',' ' '); do
+        case "$cidr" in
+            *[!0-9A-Fa-f.:/]*)
+                echo "ERROR: invalid TRUSTED_PROXIES entry: $cidr" >&2
+                exit 1
+                ;;
+        esac
+        echo "set_real_ip_from $cidr;" >> /etc/nginx/real_ip.conf
+    done
+    printf 'real_ip_header X-Forwarded-For;\nreal_ip_recursive on;\n' >> /etc/nginx/real_ip.conf
+fi
+
 # Identity headers sent to the generator's /api/ endpoints. Outside OIDC mode
 # they are always blanked so a client can never supply its own.
 cat > /etc/nginx/api_auth.conf <<'EOF'

@@ -86,6 +86,7 @@ docker compose build && docker compose up -d
 | `OIDC_COOKIE_SECURE` | `false`        | Set `true` when behind TLS                       |
 | `OIDC_ALLOWED_GROUP` | (unset)        | Required OIDC group for access (e.g. `easyhoster-users`) |
 | `OIDC_GROUPS_CLAIM`  | `groups`       | JWT claim containing group membership list       |
+| `TRUSTED_PROXIES`    | (unset)        | CIDRs allowed to set the client IP via `X-Forwarded-For`; OIDC and nginx-proxy overlays default to RFC-1918 ranges |
 
 ## Security Posture
 
