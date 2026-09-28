@@ -266,6 +266,7 @@ Add a `meta.json` file to any folder to control how it appears on the index:
 ## Security
 
 - Security headers on all responses (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`)
+- Content-Security-Policy on the generated index page (blocks external scripts and requests to other hosts)
 - Rate limiting (20 req/s per real client IP, burst 40)
 - No directory listing — the generated index is the only navigation
 - `meta.json` files are blocked from being served directly

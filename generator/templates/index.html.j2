@@ -641,7 +641,8 @@
         {% if cat.pages %}
         {% for page in cat.pages %}
         <div class="page-item">
-          <a class="page-name" href="{{ page.path }}" title="{{ page.title }}"{% if open_new_tab %} target="_blank"{% endif %}>{{ page.title }}</a>
+          {# Leading slash keeps the href a path, so a folder named "javascript:..." is never read as a URL scheme #}
+          <a class="page-name" href="/{{ page.path }}" title="{{ page.title }}"{% if open_new_tab %} target="_blank"{% endif %}>{{ page.title }}</a>
           {% if page.shortlink %}
           <span class="shortlink" title="Copy short link" onclick="copyShortlink(event, this, '{{ page.shortlink }}')">/s/{{ page.shortlink }}</span>
           {% endif %}

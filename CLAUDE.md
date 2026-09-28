@@ -92,7 +92,7 @@ docker compose build && docker compose up -d
 - Nginx runs as non-root (`nginx` user, uid 101)
 - Generator runs as non-root (`appuser`, uid 1000)
 - `server_tokens off` — no version disclosure
-- Security headers on all responses: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Content-Security-Policy`
+- Security headers on all responses: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`; `Content-Security-Policy` on the generated index only (hosted content files are arbitrary HTML and run on the same origin)
 - Rate limiting: 20 req/s per IP, burst 40
 - No directory listing — only the generated `index.html` serves as navigation
 - Only `.html` files are linked from the index; Nginx still serves any valid file path (for assets referenced by HTML files)
