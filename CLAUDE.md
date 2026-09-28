@@ -118,7 +118,7 @@ Three mutually exclusive modes, controlled by environment variables:
 4. Generate a cookie secret: `openssl rand -base64 24`
 5. Start with the OIDC overlay: `docker compose -f docker-compose.yml -f docker-compose.oidc.yml up -d`
 
-In OIDC mode, nginx is not exposed to the host — all traffic goes through oauth2-proxy on the configured `PORT` (default 4180). The credential modal is not shown; uploads rely on the OIDC session.
+In OIDC mode, nginx is not exposed to the host — all traffic goes through oauth2-proxy on the configured `PORT` (default 4180). The credential modal is not shown; uploads rely on the OIDC session. nginx validates every `/api/` request against oauth2-proxy's `/oauth2/auth` endpoint (`auth_request`) and sets `X-Forwarded-User`/`X-Forwarded-Email` from its response; client-supplied values are always discarded. The generated snippets live in `/etc/nginx/api_auth.conf` and `/etc/nginx/oidc_auth_location.conf` (written by `nginx/entrypoint.sh`).
 
 ## Development Notes
 
