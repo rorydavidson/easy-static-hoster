@@ -107,7 +107,7 @@ Three mutually exclusive modes, controlled by environment variables:
 
 | Mode | Env vars | Behaviour |
 |------|----------|-----------|
-| **No auth** | Neither `BASIC_AUTH` nor `OIDC_ISSUER_URL` | Site fully public, no upload UI |
+| **No auth** | Neither `BASIC_AUTH` nor `OIDC_ISSUER_URL` | Site fully public, no upload UI, short links read-only (`/api/shortlinks` returns 403) |
 | **Basic Auth** | `BASIC_AUTH=user:pass` (optionally `AUTH_GLOBAL=true`) | Upload requires credentials; optionally locks entire site |
 | **OIDC** | `OIDC_ISSUER_URL` + client vars + `OIDC_ALLOWED_GROUP` | oauth2-proxy handles login; only users in the allowed group can access the site and upload |
 

@@ -83,9 +83,12 @@ Every page on the index can have a short, memorable URL — e.g. `/s/q1` instead
 Click the **chain-link icon** (🔗) that appears on the right of any row when you hover over it. A small popover opens:
 
 1. Type a code — lowercase letters, digits, hyphens, and underscores only (e.g. `q1`, `annual-report`, `demo_2025`)
-2. Click **Save** — the badge `/s/your-code` appears on the row immediately
+2. In Basic Auth mode, enter your credentials (OIDC mode uses your SSO session)
+3. Click **Save** — the badge `/s/your-code` appears on the row immediately
 
 The change is written to `shortlinks.json` in your content directory with no restart needed.
+
+Editing short links needs the same auth as uploads, so the chain-link icon only appears when `BASIC_AUTH` or OIDC is configured. With no auth, existing short links still redirect and you can edit `shortlinks.json` by hand.
 
 ### Copying a short link
 
@@ -191,7 +194,7 @@ cp .env.example .env
 
 ### Auth modes at a glance
 
-| Mode | Env vars | Site | Upload / New category |
+| Mode | Env vars | Site | Upload / New category / Short link editing |
 |------|----------|------|----------------------|
 | No auth | *(none)* | public | hidden |
 | Basic Auth | `BASIC_AUTH` | public (or locked with `AUTH_GLOBAL=true`) | credentials on every action |

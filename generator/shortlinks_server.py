@@ -3,7 +3,7 @@ EasyHoster shortlinks server — runs as a daemon thread inside the generator
 container, now using Flask for better security and production readiness.
 
 GET  /s/<code>         → 302 redirect to the mapped page
-POST /api/shortlinks   → set or remove a short link (JSON body)
+POST /api/shortlinks   → set or remove a short link (JSON body; same auth as upload)
 POST /api/upload       → upload an HTML file to an existing category folder
                          (only active when BASIC_AUTH env var is set)
 """
@@ -107,7 +107,12 @@ def redirect_shortlink(code):
 
 @app.route('/api/shortlinks', methods=['POST'])
 def handle_shortlink():
-    # As requested, #1 (auth for shortlinks) is ignored.
+    if not _UPLOAD_ENABLED:
+        return jsonify({"error": "short link editing not available"}), 403
+
+    if not _check_upload_auth():
+        return jsonify({"error": "invalid credentials"}), 401
+
     data = request.get_json(silent=True)
     if data is None:
         return jsonify({"error": "invalid JSON"}), 400

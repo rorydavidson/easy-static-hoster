@@ -24,6 +24,13 @@ def test_load_shortlinks_parse_error(client, tmp_path):
     response = client.get('/s/nonexistent')
     assert response.status_code == 404
 
+def test_oidc_shortlink_auth(client, monkeypatch):
+    monkeypatch.setattr(shortlinks_server, '_OIDC_MODE', True)
+    response = client.post('/api/shortlinks', json={"path": "p.html", "code": "p"})
+    assert response.status_code == 401
+    response = client.post('/api/shortlinks', json={"path": "p.html", "code": "p"}, headers={"X-Forwarded-User": "testuser"})
+    assert response.status_code == 200
+
 def test_oidc_auth(client, monkeypatch):
     monkeypatch.setattr(shortlinks_server, '_OIDC_MODE', True)
     response = client.post('/api/mkdir', headers={"X-Folder": "new", "X-Forwarded-User": "testuser"})
@@ -34,12 +41,12 @@ def test_basic_auth_invalid_base64(client):
     assert response.status_code == 401
 
 def test_handle_shortlink_invalid_json(client):
-    response = client.post('/api/shortlinks', data="not-json", content_type="application/json")
+    response = client.post('/api/shortlinks', data="not-json", content_type="application/json", headers={"Authorization": get_auth()})
     assert response.status_code == 400
     assert b"invalid JSON" in response.data
 
 def test_handle_shortlink_missing_path(client):
-    response = client.post('/api/shortlinks', json={"code": "mycode"})
+    response = client.post('/api/shortlinks', json={"code": "mycode"}, headers={"Authorization": get_auth()})
     assert response.status_code == 400
     assert b"path is required" in response.data
 
@@ -47,7 +54,7 @@ def test_handle_shortlink_save_error(client, monkeypatch):
     def mock_save(*args, **kwargs):
         raise Exception("Disk full")
     monkeypatch.setattr(shortlinks_server, 'save_shortlinks', mock_save)
-    response = client.post('/api/shortlinks', json={"path": "page.html", "code": "mycode"})
+    response = client.post('/api/shortlinks', json={"path": "page.html", "code": "mycode"}, headers={"Authorization": get_auth()})
     assert response.status_code == 500
     assert b"failed to save" in response.data
 
