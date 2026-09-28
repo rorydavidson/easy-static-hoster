@@ -86,13 +86,14 @@ docker compose build && docker compose up -d
 | `OIDC_COOKIE_SECURE` | `false`        | Set `true` when behind TLS                       |
 | `OIDC_ALLOWED_GROUP` | (unset)        | Required OIDC group for access (e.g. `easyhoster-users`) |
 | `OIDC_GROUPS_CLAIM`  | `groups`       | JWT claim containing group membership list       |
+| `TRUSTED_PROXIES`    | (unset)        | CIDRs allowed to set the client IP via `X-Forwarded-For`; OIDC and nginx-proxy overlays default to RFC-1918 ranges |
 
 ## Security Posture
 
 - Nginx runs as non-root (`nginx` user, uid 101)
 - Generator runs as non-root (`appuser`, uid 1000)
 - `server_tokens off` — no version disclosure
-- Security headers on all responses: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Content-Security-Policy`
+- Security headers on all responses: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`; `Content-Security-Policy` on the generated index only (hosted content files are arbitrary HTML and run on the same origin)
 - Rate limiting: 20 req/s per IP, burst 40
 - No directory listing — only the generated `index.html` serves as navigation
 - Only `.html` files are linked from the index; Nginx still serves any valid file path (for assets referenced by HTML files)
@@ -106,7 +107,7 @@ Three mutually exclusive modes, controlled by environment variables:
 
 | Mode | Env vars | Behaviour |
 |------|----------|-----------|
-| **No auth** | Neither `BASIC_AUTH` nor `OIDC_ISSUER_URL` | Site fully public, no upload UI |
+| **No auth** | Neither `BASIC_AUTH` nor `OIDC_ISSUER_URL` | Site fully public, no upload UI, short links read-only (`/api/shortlinks` returns 403) |
 | **Basic Auth** | `BASIC_AUTH=user:pass` (optionally `AUTH_GLOBAL=true`) | Upload requires credentials; optionally locks entire site |
 | **OIDC** | `OIDC_ISSUER_URL` + client vars + `OIDC_ALLOWED_GROUP` | oauth2-proxy handles login; only users in the allowed group can access the site and upload |
 
@@ -118,7 +119,7 @@ Three mutually exclusive modes, controlled by environment variables:
 4. Generate a cookie secret: `openssl rand -base64 24`
 5. Start with the OIDC overlay: `docker compose -f docker-compose.yml -f docker-compose.oidc.yml up -d`
 
-In OIDC mode, nginx is not exposed to the host — all traffic goes through oauth2-proxy on the configured `PORT` (default 4180). The credential modal is not shown; uploads rely on the OIDC session.
+In OIDC mode, nginx is not exposed to the host — all traffic goes through oauth2-proxy on the configured `PORT` (default 4180). The credential modal is not shown; uploads rely on the OIDC session. nginx validates every `/api/` request against oauth2-proxy's `/oauth2/auth` endpoint (`auth_request`) and sets `X-Forwarded-User`/`X-Forwarded-Email` from its response; client-supplied values are always discarded. The generated snippets live in `/etc/nginx/api_auth.conf` and `/etc/nginx/oidc_auth_location.conf` (written by `nginx/entrypoint.sh`).
 
 ## Development Notes
 

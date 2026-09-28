@@ -25,6 +25,10 @@ def client(tmp_path):
     with app.test_client() as client:
         yield client
 
+def auth_headers():
+    import base64
+    return {"Authorization": "Basic " + base64.b64encode(b"admin:secret").decode("utf-8")}
+
 def test_redirect_shortlink_not_found(client):
     response = client.get('/s/nonexistent')
     assert response.status_code == 404
@@ -43,7 +47,7 @@ def test_handle_shortlink_create_and_redirect(client, tmp_path):
     
     # Create shortlink
     response = client.post('/api/shortlinks', 
-                          json={"path": "folder/page.html", "code": "my-page"})
+                          json={"path": "folder/page.html", "code": "my-page"}, headers=auth_headers())
     assert response.status_code == 200
     
     # Verify the json was saved
@@ -59,17 +63,17 @@ def test_handle_shortlink_create_and_redirect(client, tmp_path):
 
 def test_handle_shortlink_invalid_code(client):
     response = client.post('/api/shortlinks', 
-                          json={"path": "page.html", "code": "INVALID CODE!"})
+                          json={"path": "page.html", "code": "INVALID CODE!"}, headers=auth_headers())
     assert response.status_code == 400
     assert b"must be lowercase letters" in response.data
 
 def test_handle_shortlink_conflict(client):
     # Create first shortlink
-    client.post('/api/shortlinks', json={"path": "page1.html", "code": "shared"})
+    client.post('/api/shortlinks', json={"path": "page1.html", "code": "shared"}, headers=auth_headers())
     
     # Try creating second shortlink with same code
     response = client.post('/api/shortlinks', 
-                          json={"path": "page2.html", "code": "shared"})
+                          json={"path": "page2.html", "code": "shared"}, headers=auth_headers())
     assert response.status_code == 409
     assert b"already used" in response.data
 
@@ -141,3 +145,18 @@ def test_handle_upload_invalid_extension(client, tmp_path):
     
     assert response.status_code == 400
     assert b"only HTML and image files are allowed" in response.data
+
+def test_handle_shortlink_unauthorized(client):
+    response = client.post('/api/shortlinks', json={"path": "page.html", "code": "x"})
+    assert response.status_code == 401
+
+def test_handle_shortlink_wrong_credentials(client):
+    import base64
+    bad = {"Authorization": "Basic " + base64.b64encode(b"admin:wrong").decode("utf-8")}
+    response = client.post('/api/shortlinks', json={"path": "page.html", "code": "x"}, headers=bad)
+    assert response.status_code == 401
+
+def test_handle_shortlink_disabled_without_auth_mode(client, monkeypatch):
+    monkeypatch.setattr(shortlinks_server, '_UPLOAD_ENABLED', False)
+    response = client.post('/api/shortlinks', json={"path": "page.html", "code": "x"}, headers=auth_headers())
+    assert response.status_code == 403

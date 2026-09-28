@@ -31,6 +31,7 @@ services:
       BASIC_AUTH: ${BASIC_AUTH:-}
       AUTH_GLOBAL: ${AUTH_GLOBAL:-}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
     depends_on:
       generator:
         condition: service_healthy

@@ -297,6 +297,8 @@
       min-width: 0;
     }
 
+    .popover-cred { margin-top: 0.55rem; }
+
     .popover-actions {
       display: flex;
       gap: 0.4rem;
@@ -641,10 +643,12 @@
         {% if cat.pages %}
         {% for page in cat.pages %}
         <div class="page-item">
-          <a class="page-name" href="{{ page.path }}" title="{{ page.title }}"{% if open_new_tab %} target="_blank"{% endif %}>{{ page.title }}</a>
+          {# Leading slash keeps the href a path, so a folder named "javascript:..." is never read as a URL scheme #}
+          <a class="page-name" href="/{{ page.path }}" title="{{ page.title }}"{% if open_new_tab %} target="_blank"{% endif %}>{{ page.title }}</a>
           {% if page.shortlink %}
           <span class="shortlink" title="Copy short link" onclick="copyShortlink(event, this, '{{ page.shortlink }}')">/s/{{ page.shortlink }}</span>
           {% endif %}
+          {% if upload_enabled %}
           <button type="button" class="edit-link-btn"
                   data-path="{{ page.path }}"
                   data-code="{{ page.shortlink or '' }}"
@@ -655,6 +659,7 @@
               <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
             </svg>
           </button>
+          {% endif %}
           <span class="page-date">{{ page.modified }}</span>
         </div>
         {% endfor %}
@@ -727,6 +732,16 @@
       <span class="popover-prefix">/s/</span>
       <input id="link-input" type="text" placeholder="my-code" autocomplete="off" spellcheck="false" maxlength="50">
     </div>
+    {% if auth_mode == "basic" %}
+    <div class="cred-field popover-cred">
+      <label for="link-user">Username</label>
+      <input id="link-user" type="text" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="cred-field popover-cred">
+      <label for="link-pass">Password</label>
+      <input id="link-pass" type="password" autocomplete="new-password">
+    </div>
+    {% endif %}
     <div class="popover-actions">
       <button type="button" class="popover-save" onclick="saveShortlink()">Save</button>
       <button type="button" class="popover-remove" id="link-remove" onclick="removeShortlink()">Remove</button>
@@ -941,6 +956,10 @@
       var code = btn.dataset.code || '';
       document.getElementById('link-input').value = code;
       document.getElementById('link-error').textContent = '';
+      if (_authMode === 'basic') {
+        document.getElementById('link-user').value = '';
+        document.getElementById('link-pass').value = '';
+      }
       document.getElementById('link-remove').style.display = code ? '' : 'none';
 
       var popover = document.getElementById('link-popover');
@@ -974,12 +993,26 @@
     function _callApi(code) {
       if (!_activeBtn) return;
       var path = _activeBtn.dataset.path;
+      var errEl = document.getElementById('link-error');
+      var headers = { 'Content-Type': 'application/json' };
 
-      document.getElementById('link-error').textContent = '';
+      if (_authMode === 'basic') {
+        var user = document.getElementById('link-user').value.trim();
+        var pass = document.getElementById('link-pass').value;
+        if (!user || !pass) { errEl.textContent = 'Credentials are required'; return; }
+        try {
+          headers['Authorization'] = 'Basic ' + btoa(user + ':' + pass);
+        } catch (err) {
+          errEl.textContent = 'Credentials must only contain ASCII characters';
+          return;
+        }
+      }
+
+      errEl.textContent = '';
 
       fetch('/api/shortlinks', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify({ path: path, code: code })
       })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })

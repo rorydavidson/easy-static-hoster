@@ -171,3 +171,20 @@ def test_favicon_link_in_rendered_html(tmp_path, monkeypatch):
     html = (content_dir / "index.html").read_text()
     assert 'rel="icon"' in html
     assert "/favicon.ico" in html
+
+
+# ── Link safety ─────────────────────────────────────────────────────────────
+
+def test_page_links_are_root_relative(tmp_path, monkeypatch):
+    """A folder named like a URL scheme must not become a javascript: link."""
+    monkeypatch.delenv("BASIC_AUTH", raising=False)
+    monkeypatch.delenv("OIDC_ISSUER_URL", raising=False)
+    content_dir = tmp_path / "content"
+    content_dir.mkdir()
+    evil = content_dir / "javascript:alert(1)"
+    evil.mkdir()
+    (evil / "page.html").write_text("<title>P</title>")
+    generate.render_index(content_dir, "T")
+    html = (content_dir / "index.html").read_text()
+    assert 'href="/javascript:alert(1)/page.html"' in html
+    assert 'href="javascript:' not in html

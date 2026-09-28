@@ -83,9 +83,12 @@ Every page on the index can have a short, memorable URL — e.g. `/s/q1` instead
 Click the **chain-link icon** (🔗) that appears on the right of any row when you hover over it. A small popover opens:
 
 1. Type a code — lowercase letters, digits, hyphens, and underscores only (e.g. `q1`, `annual-report`, `demo_2025`)
-2. Click **Save** — the badge `/s/your-code` appears on the row immediately
+2. In Basic Auth mode, enter your credentials (OIDC mode uses your SSO session)
+3. Click **Save** — the badge `/s/your-code` appears on the row immediately
 
 The change is written to `shortlinks.json` in your content directory with no restart needed.
+
+Editing short links needs the same auth as uploads, so the chain-link icon only appears when `BASIC_AUTH` or OIDC is configured. With no auth, existing short links still redirect and you can edit `shortlinks.json` by hand.
 
 ### Copying a short link
 
@@ -175,6 +178,7 @@ cp .env.example .env
 | `PORT`         | `8080`        | Host port to expose                                |
 | `BASIC_AUTH`   | *(unset)*     | Credentials for upload — set to `username:password`. Also enables the upload and new-category buttons. |
 | `AUTH_GLOBAL`  | *(unset)*     | Set to `true` to lock the **entire site** with the same credentials (requires `BASIC_AUTH`). |
+| `TRUSTED_PROXIES` | *(unset)*  | Comma-separated CIDRs of reverse proxies allowed to set the client IP via `X-Forwarded-For`. Leave unset when nginx is exposed directly. The OIDC and nginx-proxy overlays default it to the private Docker ranges. |
 
 **OIDC variables** (used with `docker-compose.oidc.yml` — mutually exclusive with `BASIC_AUTH`):
 
@@ -190,7 +194,7 @@ cp .env.example .env
 
 ### Auth modes at a glance
 
-| Mode | Env vars | Site | Upload / New category |
+| Mode | Env vars | Site | Upload / New category / Short link editing |
 |------|----------|------|----------------------|
 | No auth | *(none)* | public | hidden |
 | Basic Auth | `BASIC_AUTH` | public (or locked with `AUTH_GLOBAL=true`) | credentials on every action |
@@ -266,6 +270,7 @@ Add a `meta.json` file to any folder to control how it appears on the index:
 ## Security
 
 - Security headers on all responses (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`)
+- Content-Security-Policy on the generated index page (blocks external scripts and requests to other hosts)
 - Rate limiting (20 req/s per real client IP, burst 40)
 - No directory listing — the generated index is the only navigation
 - `meta.json` files are blocked from being served directly
@@ -317,9 +322,9 @@ docker compose -f docker-compose.yml -f docker-compose.nginx-proxy.yml up -d --b
 
 - **Short link redirects** issue relative `Location` headers (`/presentations/file.html`), so the browser resolves them against the public URL — no changes needed.
 - **The copy-to-clipboard button** uses `window.location.origin` (browser-side), which already knows the public scheme and hostname — no changes needed.
-- **Rate limiting** uses the real client IP via `X-Forwarded-For` (configured in `nginx.conf`) — not the proxy's container IP.
+- **Rate limiting** uses the real client IP via `X-Forwarded-For` — not the proxy's container IP. The overlay sets `TRUSTED_PROXIES` to the private Docker ranges so nginx accepts that header from nginx-proxy; override it in `.env` if your proxy lives elsewhere.
 
-> **Note:** The `PORT` host-port mapping stays active even when behind nginx-proxy (nginx-proxy routes via the Docker network, not the published port). You can set `PORT=127.0.0.1:8080` in `.env` to restrict direct access to localhost only.
+> **Note:** The `PORT` host-port mapping stays active even when behind nginx-proxy (nginx-proxy routes via the Docker network, not the published port). Set `PORT=127.0.0.1:8080` in `.env` to restrict direct access to localhost only. This matters because the published port may present clients with a private Docker gateway IP, which `TRUSTED_PROXIES` trusts.
 
 ---
 
@@ -329,7 +334,7 @@ Use the `docker-compose.oidc.yml` overlay to protect the entire site with an OID
 
 ### How it works
 
-An [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) container sits in front of nginx. Unauthenticated users see a branded sign-in page with the site logo and a **Sign in** button. Clicking it redirects to your OIDC provider to log in. After login, oauth2-proxy checks that the user belongs to the required group (`OIDC_ALLOWED_GROUP`) and proxies requests to nginx with the user's identity in `X-Forwarded-User` / `X-Forwarded-Email` headers. Users who authenticate but are not in the allowed group are denied access. Upload and category creation work without a credential prompt — the SSO session handles auth.
+An [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) container sits in front of nginx. Unauthenticated users see a branded sign-in page with the site logo and a **Sign in** button. Clicking it redirects to your OIDC provider to log in. After login, oauth2-proxy checks that the user belongs to the required group (`OIDC_ALLOWED_GROUP`) and proxies requests to nginx with the user's identity in `X-Forwarded-User` / `X-Forwarded-Email` headers. Users who authenticate but are not in the allowed group are denied access. Upload and category creation work without a credential prompt — the SSO session handles auth. For every `/api/` request nginx asks oauth2-proxy to confirm the session and takes the user's identity from that answer, so identity headers sent by a client are never trusted. If oauth2-proxy is not running (for example the overlay was left out), the API refuses requests rather than falling back to no auth.
 
 ### Provider setup (Keycloak example)
 
