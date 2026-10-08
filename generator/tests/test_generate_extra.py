@@ -257,3 +257,46 @@ def test_build_context_tolerates_malformed_shortlinks(tmp_path, raw):
     ctx = generate.build_context(content_dir, "T")
     expected = "good" if raw.startswith("{") else None
     assert ctx["categories"][0]["pages"][0]["shortlink"] == expected
+
+
+class _FakeResponse:
+    def __init__(self, body):
+        self._body = body
+    def read(self, *args):
+        return self._body
+    def __enter__(self):
+        return self
+    def __exit__(self, *args):
+        return False
+
+
+def test_oidc_logout_url_from_discovery(monkeypatch):
+    monkeypatch.setattr(generate, "_end_session_endpoints", {})
+    monkeypatch.setenv("OIDC_ISSUER_URL", "https://idp.example/realms/r/")
+    monkeypatch.setenv("OIDC_CLIENT_ID", "easy hoster")
+    requested = []
+    def fake_urlopen(url, timeout):
+        requested.append(url)
+        return _FakeResponse(b'{"end_session_endpoint": "https://idp.example/logout"}')
+    monkeypatch.setattr(generate.urllib.request, "urlopen", fake_urlopen)
+    assert generate.oidc_logout_url() == "https://idp.example/logout?client_id=easy%20hoster"
+    assert requested == ["https://idp.example/realms/r/.well-known/openid-configuration"]
+
+
+def test_oidc_logout_url_empty_when_discovery_fails(monkeypatch):
+    monkeypatch.setattr(generate, "_end_session_endpoints", {})
+    monkeypatch.setenv("OIDC_ISSUER_URL", "https://idp.example")
+    def fail(url, timeout):
+        raise OSError("unreachable")
+    monkeypatch.setattr(generate.urllib.request, "urlopen", fail)
+    assert generate.oidc_logout_url() == ""
+    # Failure is not cached, so a later rebuild tries again
+    assert generate._end_session_endpoints == {}
+
+
+def test_oidc_logout_url_rejects_non_http_endpoint(monkeypatch):
+    monkeypatch.setattr(generate, "_end_session_endpoints", {})
+    monkeypatch.setenv("OIDC_ISSUER_URL", "https://idp.example")
+    monkeypatch.setattr(generate.urllib.request, "urlopen", lambda url, timeout:
+                        _FakeResponse(b'{"end_session_endpoint": "javascript:alert(1)"}'))
+    assert generate.oidc_logout_url() == ""

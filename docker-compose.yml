@@ -10,6 +10,7 @@ services:
       OPEN_NEW_TAB: ${OPEN_NEW_TAB:-true}
       BASIC_AUTH: ${BASIC_AUTH:-}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
     expose:
       - "5000"
     restart: unless-stopped
