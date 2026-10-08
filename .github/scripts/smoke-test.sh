@@ -10,6 +10,8 @@ PROJECT="eh-smoke-$$"
 PORT="${SMOKE_PORT:-18080}"
 BASE="http://127.0.0.1:$PORT"
 CONTENT_DIR=$(mktemp -d)
+# mktemp makes it 0700; nginx runs as a different uid and must traverse it
+chmod 755 "$CONTENT_DIR"
 # Throwaway credentials, generated per run
 CREDS="smoke:$(openssl rand -hex 12)"
 
@@ -76,6 +78,14 @@ for _ in $(seq 15); do
     sleep 1
 done
 if [ "$found" = yes ]; then pass "index picks up upload"; else fail "index picks up upload"; fi
+
+# Once content stops changing, the generator must stop rebuilding
+rebuilds() { docker compose -p "$PROJECT" logs generator 2>/dev/null | grep -c "Index rebuilt"; }
+sleep 3
+before=$(rebuilds)
+sleep 6
+after=$(rebuilds)
+if [ "$before" = "$after" ]; then pass "generator settles"; else fail "generator settles ($before -> $after rebuilds while idle)"; fi
 
 # Last, as it exhausts this client's API allowance
 expect_status "bad credentials rejected" 401 -u smoke:wrong \
