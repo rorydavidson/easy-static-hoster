@@ -9,6 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # this via COPY --from, so a test failure breaks the build.
 FROM base AS test
 
+COPY requirements-dev.txt .
+RUN pip install --no-cache-dir -r requirements-dev.txt
 COPY generate.py shortlinks_server.py ./
 COPY templates/ templates/
 COPY tests/ tests/
@@ -21,8 +23,9 @@ FROM base AS production
 # su-exec: lightweight tool to drop from root to appuser after fixing volume ownership
 RUN apk add --no-cache su-exec
 
-# Create a non-root user
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Create a non-root user. Fixed uid/gid 1000 matches the usual first user on a
+# Linux host, so files the generator writes stay editable there.
+RUN addgroup -S -g 1000 appgroup && adduser -S -u 1000 -G appgroup appuser
 
 # Force the test stage to run before this image can be built
 COPY --from=test /tmp/.tests-passed /tmp/.test-sentinel
