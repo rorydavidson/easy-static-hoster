@@ -264,7 +264,7 @@ Add a `meta.json` file to any folder to control how it appears on the index:
 |----------|----------------------|----------------------------------------------|
 | `title`  | humanized folder name| Display name shown on the index              |
 | `order`  | `999`                | Sort order (lower numbers appear first)      |
-| `hidden` | `false`              | Set to `true` to hide the category entirely  |
+| `hidden` | `false`              | Set to `true` to hide the category from the index. Its files are still served to anyone with the URL, so this is not access control. |
 
 ---
 
@@ -275,7 +275,7 @@ Add a `meta.json` file to any folder to control how it appears on the index:
 - **Hosted page sandbox** (public sites only): hosted HTML runs on the same origin as the index and the upload API, so a hostile or compromised page could otherwise read credentials typed into the index or call the API. A CSP `sandbox` gives each page an opaque origin instead. Scripts, forms, popups and downloads still work; what breaks is `fetch()`/XHR of the page's own data files, `localStorage`/cookies, and iframes of other hosted pages. Set `CONTENT_SANDBOX=false` if you rely on those. The sandbox is skipped behind OIDC or `AUTH_GLOBAL`, because browsers send no session cookie with a sandboxed page's own images, CSS and scripts, so they would fail to load. In those modes anything you host can act with the viewer's session, so only host pages from people you trust.
 - Rate limiting: 5 req/s per real client IP (burst 20), and 10 req/min (burst 10) on `/api/` to slow password guessing
 - No directory listing — the generated index is the only navigation
-- `meta.json` files are blocked from being served directly
+- `meta.json`, `shortlinks.json` and temporary upload files are blocked from being served directly
 - Nginx version not disclosed in headers or error pages
 - Both containers run as non-root users
 - **Upload auth (Basic Auth)**: credentials validated server-side on every request via `Authorization: Basic` header — the browser never issues a `WWW-Authenticate` challenge so credentials are never cached
