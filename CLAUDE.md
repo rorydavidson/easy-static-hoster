@@ -95,7 +95,7 @@ docker compose build && docker compose up -d
 - Generator runs as non-root (`appuser`, uid 1000)
 - `server_tokens off` — no version disclosure
 - Security headers on all responses: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`; `Content-Security-Policy` on the generated index; on public sites hosted pages get a CSP `sandbox` (opaque origin) so their scripts cannot reach the index or the API. Skipped behind OIDC/`AUTH_GLOBAL` because sandboxed pages' subresource requests carry no session cookie
-- Rate limiting: 20 req/s per IP, burst 40
+- Rate limiting: 5 req/s per IP, burst 20; `/api/` additionally 10 req/min, burst 10 (credential brute force)
 - No directory listing — only the generated `index.html` serves as navigation
 - Only `.html` files are linked from the index; Nginx still serves any valid file path (for assets referenced by HTML files)
 - Optional Basic Auth gates the entire site with a single env var
