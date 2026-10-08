@@ -240,3 +240,20 @@ def test_shortlink_code_not_interpolated_into_js(tmp_path):
     html = (content_dir / "index.html").read_text(encoding="utf-8")
     assert "copyShortlink(event, this, this.dataset.code)" in html
     assert "alert(1);//')" not in html
+
+
+def test_build_context_skips_dot_directories(tmp_path):
+    content_dir = _make_content_dir(tmp_path)
+    (content_dir / ".git").mkdir()
+    (content_dir / ".git" / "x.html").write_text("x")
+    folders = [c["folder"] for c in generate.build_context(content_dir, "T")["categories"]]
+    assert folders == ["cat"]
+
+
+@pytest.mark.parametrize("raw", ['["a"]', '{"good": "cat/page.html", "bad": 1}'])
+def test_build_context_tolerates_malformed_shortlinks(tmp_path, raw):
+    content_dir = _make_content_dir(tmp_path)
+    (content_dir / "shortlinks.json").write_text(raw)
+    ctx = generate.build_context(content_dir, "T")
+    expected = "good" if raw.startswith("{") else None
+    assert ctx["categories"][0]["pages"][0]["shortlink"] == expected

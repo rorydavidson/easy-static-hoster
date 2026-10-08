@@ -62,7 +62,8 @@ def extract_title(path: Path) -> str | None:
     """Return the text content of the first <title> tag, or None."""
     try:
         # Only read the first 4 KB — the <title> is always in <head>
-        content = path.read_bytes()[:4096].decode("utf-8", errors="ignore")
+        with path.open("rb") as f:
+            content = f.read(4096).decode("utf-8", errors="ignore")
         parser = _TitleParser()
         parser.feed(content)
         return parser.title
@@ -83,10 +84,13 @@ def load_shortlinks(content_dir: Path) -> dict:
     if not path.exists():
         return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        links = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         log.warning("Could not parse shortlinks.json: %s", exc)
         return {}
+    if not isinstance(links, dict):
+        return {}
+    return {k: v for k, v in links.items() if isinstance(v, str)}
 
 
 # ── Index builder ─────────────────────────────────────────────────────────────
@@ -99,7 +103,8 @@ def build_context(content_dir: Path, site_title: str) -> dict:
     categories = []
 
     for folder in sorted(content_dir.iterdir()):
-        if not folder.is_dir():
+        # Dot-dirs (.git, editor caches) are never served by nginx anyway
+        if not folder.is_dir() or folder.name.startswith("."):
             continue
 
         # Optional per-category metadata
