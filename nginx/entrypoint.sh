@@ -13,6 +13,17 @@ set -e
 
 # TRUSTED_PROXIES: comma- or space-separated CIDRs of reverse proxies allowed
 # to set X-Forwarded-For. Leave empty when clients connect to nginx directly.
+# "auto" trusts only the Docker networks this container is attached to, i.e.
+# the proxy in front of it. Trusting every private range would also trust
+# LAN clients, who could then fake their IP to dodge the rate limits.
+if [ "$TRUSTED_PROXIES" = "auto" ]; then
+    TRUSTED_PROXIES=""
+    for addr in $(ip -o -f inet addr show | awk '$2 != "lo" {print $4}'); do
+        network=$(ipcalc -n "$addr" | cut -d= -f2)
+        TRUSTED_PROXIES="$TRUSTED_PROXIES $network/${addr#*/}"
+    done
+    echo "Trusting X-Forwarded-For from Docker networks:$TRUSTED_PROXIES"
+fi
 : > /etc/nginx/real_ip.conf
 if [ -n "$TRUSTED_PROXIES" ]; then
     for cidr in $(echo "$TRUSTED_PROXIES" | tr ',' ' '); do

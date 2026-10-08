@@ -87,7 +87,7 @@ docker compose build && docker compose up -d
 | `OIDC_ALLOWED_GROUP` | (unset)        | Required OIDC group for access (e.g. `easyhoster-users`) |
 | `OIDC_GROUPS_CLAIM`  | `groups`       | JWT claim containing group membership list       |
 | `CONTENT_SANDBOX`    | `true`         | Set `false` to drop the hosted-page sandbox (breaks `fetch()` of own files, `localStorage`) |
-| `TRUSTED_PROXIES`    | (unset)        | CIDRs allowed to set the client IP via `X-Forwarded-For`; OIDC and nginx-proxy overlays default to RFC-1918 ranges |
+| `TRUSTED_PROXIES`    | (unset)        | CIDRs allowed to set the client IP via `X-Forwarded-For`; `auto` = Docker networks nginx is attached to (nginx-proxy overlay default); OIDC overlay defaults to RFC-1918 ranges |
 
 ## Security Posture
 
