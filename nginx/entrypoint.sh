@@ -101,9 +101,16 @@ elif [ -n "$BASIC_AUTH" ]; then
 
     AUTH_DIRECTIVES='auth_basic "Restricted";\nauth_basic_user_file /etc/nginx/.htpasswd;\n'
 
-    if [ -n "$AUTH_GLOBAL" ]; then
+    # Any value other than empty/false/0/no/off locks the site, so a typo
+    # fails closed rather than exposing it
+    case "$AUTH_GLOBAL" in
+        ""|false|False|FALSE|0|no|off) AUTH_GLOBAL_ON=false ;;
+        *) AUTH_GLOBAL_ON=true ;;
+    esac
+
+    if [ "$AUTH_GLOBAL_ON" = true ]; then
         # Lock the entire site via nginx
-        printf "$AUTH_DIRECTIVES" > /etc/nginx/global_auth.conf
+        printf '%b' "$AUTH_DIRECTIVES" > /etc/nginx/global_auth.conf
         SITE_PUBLIC=false
         echo "Global auth enabled for user: $USER"
     else

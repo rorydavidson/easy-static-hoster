@@ -1,7 +1,7 @@
 import os
 import time
 import pytest
-from watchdog.events import FileModifiedEvent, FileMovedEvent
+from watchdog.events import DirCreatedEvent, DirModifiedEvent, FileModifiedEvent, FileMovedEvent
 import generate
 
 def test_load_shortlinks_invalid(tmp_path):
@@ -225,3 +225,94 @@ def test_page_links_are_root_relative(tmp_path, monkeypatch):
     html = (content_dir / "index.html").read_text()
     assert 'href="/javascript:alert(1)/page.html"' in html
     assert 'href="javascript:' not in html
+
+
+def test_shortlink_code_not_interpolated_into_js(tmp_path):
+    """A hand-edited shortlinks.json must not be able to inject script.
+
+    Entity escaping does not protect a JS string inside an onclick attribute,
+    because the browser decodes &#39; back to a quote before running it.
+    """
+    content_dir = _make_content_dir(tmp_path)
+    (content_dir / "shortlinks.json").write_text(
+        '{"x\');alert(1);//": "cat/page.html"}', encoding="utf-8")
+    generate.render_index(content_dir, "T")
+    html = (content_dir / "index.html").read_text(encoding="utf-8")
+    assert "copyShortlink(event, this, this.dataset.code)" in html
+    assert "alert(1);//')" not in html
+
+
+def test_build_context_skips_dot_directories(tmp_path):
+    content_dir = _make_content_dir(tmp_path)
+    (content_dir / ".git").mkdir()
+    (content_dir / ".git" / "x.html").write_text("x")
+    folders = [c["folder"] for c in generate.build_context(content_dir, "T")["categories"]]
+    assert folders == ["cat"]
+
+
+@pytest.mark.parametrize("raw", ['["a"]', '{"good": "cat/page.html", "bad": 1}'])
+def test_build_context_tolerates_malformed_shortlinks(tmp_path, raw):
+    content_dir = _make_content_dir(tmp_path)
+    (content_dir / "shortlinks.json").write_text(raw)
+    ctx = generate.build_context(content_dir, "T")
+    expected = "good" if raw.startswith("{") else None
+    assert ctx["categories"][0]["pages"][0]["shortlink"] == expected
+
+
+class _FakeResponse:
+    def __init__(self, body):
+        self._body = body
+    def read(self, *args):
+        return self._body
+    def __enter__(self):
+        return self
+    def __exit__(self, *args):
+        return False
+
+
+def test_oidc_logout_url_from_discovery(monkeypatch):
+    monkeypatch.setattr(generate, "_end_session_endpoints", {})
+    monkeypatch.setenv("OIDC_ISSUER_URL", "https://idp.example/realms/r/")
+    monkeypatch.setenv("OIDC_CLIENT_ID", "easy hoster")
+    requested = []
+    def fake_urlopen(url, timeout):
+        requested.append(url)
+        return _FakeResponse(b'{"end_session_endpoint": "https://idp.example/logout"}')
+    monkeypatch.setattr(generate.urllib.request, "urlopen", fake_urlopen)
+    assert generate.oidc_logout_url() == "https://idp.example/logout?client_id=easy%20hoster"
+    assert requested == ["https://idp.example/realms/r/.well-known/openid-configuration"]
+
+
+def test_oidc_logout_url_empty_when_discovery_fails(monkeypatch):
+    monkeypatch.setattr(generate, "_end_session_endpoints", {})
+    monkeypatch.setenv("OIDC_ISSUER_URL", "https://idp.example")
+    def fail(url, timeout):
+        raise OSError("unreachable")
+    monkeypatch.setattr(generate.urllib.request, "urlopen", fail)
+    assert generate.oidc_logout_url() == ""
+    # Failure is not cached, so a later rebuild tries again
+    assert generate._end_session_endpoints == {}
+
+
+def test_oidc_logout_url_rejects_non_http_endpoint(monkeypatch):
+    monkeypatch.setattr(generate, "_end_session_endpoints", {})
+    monkeypatch.setenv("OIDC_ISSUER_URL", "https://idp.example")
+    monkeypatch.setattr(generate.urllib.request, "urlopen", lambda url, timeout:
+                        _FakeResponse(b'{"end_session_endpoint": "javascript:alert(1)"}'))
+    assert generate.oidc_logout_url() == ""
+
+
+def test_content_handler_ignores_directory_mtime_changes(tmp_path, monkeypatch):
+    """Writing the index changes the content root's mtime; that must not
+    trigger another rebuild, or the generator loops forever."""
+    content_dir, handler, called = _handler_with_spy(tmp_path, monkeypatch)
+    handler.on_any_event(DirModifiedEvent(str(content_dir)))
+    time.sleep(0.2)
+    assert not called
+
+
+def test_content_handler_rebuilds_on_new_category(tmp_path, monkeypatch):
+    content_dir, handler, called = _handler_with_spy(tmp_path, monkeypatch)
+    handler.on_any_event(DirCreatedEvent(str(content_dir / "new-category")))
+    time.sleep(0.2)
+    assert len(called) == 1

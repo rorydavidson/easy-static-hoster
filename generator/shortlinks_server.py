@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import re
+import threading
 from pathlib import Path
 from urllib.parse import quote, unquote
 
@@ -42,17 +43,32 @@ _ALLOWED_SUFFIXES = {
     ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico",
 }
 
+# Top-level names nginx routes elsewhere (/api/, /s/, oauth2-proxy's /oauth2/),
+# so a category with one of these names could never be browsed
+_RESERVED_FOLDERS = {"api", "s", "oauth2"}
+
+# Serialises read-modify-write of shortlinks.json across waitress threads
+_shortlinks_lock = threading.Lock()
+
 app = Flask(__name__)
+
+
+def _is_inside_content_dir(path: Path) -> bool:
+    return path.resolve().is_relative_to(CONTENT_DIR.resolve())
 
 def load_shortlinks() -> dict:
     path = CONTENT_DIR / "shortlinks.json"
     if not path.exists():
         return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        links = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         log.warning("shortlinks.json parse error: %s", exc)
         return {}
+    if not isinstance(links, dict):
+        log.warning("shortlinks.json is not a JSON object; ignoring it")
+        return {}
+    return {k: v for k, v in links.items() if isinstance(v, str)}
 
 
 def save_shortlinks(links: dict) -> None:
@@ -128,21 +144,22 @@ def handle_shortlink():
     if code and not _CODE_RE.match(code):
         return jsonify({"error": "code must be lowercase letters, digits, hyphens or underscores"}), 400
 
-    links = load_shortlinks()
+    with _shortlinks_lock:
+        links = load_shortlinks()
 
-    # Remove any existing code that points to this page
-    links = {k: v for k, v in links.items() if v.lstrip("/") != page_path}
+        # Remove any existing code that points to this page
+        links = {k: v for k, v in links.items() if v.lstrip("/") != page_path}
 
-    if code:
-        if code in links:
-            return jsonify({"error": f"'{code}' is already used by another page"}), 409
-        links[code] = page_path
+        if code:
+            if code in links:
+                return jsonify({"error": f"'{code}' is already used by another page"}), 409
+            links[code] = page_path
 
-    try:
-        save_shortlinks(links)
-    except Exception as exc:
-        log.error("Failed to write shortlinks.json: %s", exc)
-        return jsonify({"error": "failed to save"}), 500
+        try:
+            save_shortlinks(links)
+        except Exception as exc:
+            log.error("Failed to write shortlinks.json: %s", exc)
+            return jsonify({"error": "failed to save"}), 500
 
     action = f"set to '{code}'" if code else "removed"
     log.info("Shortlink for %s %s", page_path, action)
@@ -158,14 +175,15 @@ def handle_upload():
         return jsonify({"error": "invalid credentials"}), 401
 
     # ── Validate folder ───────────────────────────────────────────────────
-    folder = request.headers.get("X-Folder", "").strip()
+    # URL-encoded by the index so non-ASCII names survive the HTTP header
+    folder = unquote(request.headers.get("X-Folder", "").strip())
     if not folder or "/" in folder or "\\" in folder or folder in (".", ".."):
         return jsonify({"error": "invalid folder"}), 400
 
     folder_path = CONTENT_DIR / folder
     # Ensure it resolves inside CONTENT_DIR (no path traversal)
     try:
-        if not folder_path.resolve().as_posix().startswith(CONTENT_DIR.resolve().as_posix()):
+        if not _is_inside_content_dir(folder_path):
             return jsonify({"error": "invalid folder"}), 400
     except Exception:
         return jsonify({"error": "invalid folder"}), 400
@@ -193,7 +211,8 @@ def handle_upload():
     # ── Write atomically ──────────────────────────────────────────────────
     dest = folder_path / filename
     existed = dest.exists()
-    tmp = dest.with_suffix(".upload_tmp")
+    # Per-filename temp name, so foo.html and foo.png don't share one
+    tmp = folder_path / f"{filename}.upload_tmp"
     try:
         tmp.write_bytes(data)
         tmp.rename(dest)
@@ -222,12 +241,13 @@ def handle_mkdir():
     folder_name = os.path.basename(raw_name)   # strip any path components
     if not folder_name or folder_name.startswith(".") or len(folder_name) > 100:
         return jsonify({"error": "invalid category name"}), 400
+    if folder_name.lower() in _RESERVED_FOLDERS:
+        return jsonify({"error": f"'{folder_name}' is reserved"}), 400
 
     folder_path = CONTENT_DIR / folder_name
     try:
         # Prevent path traversal (e.g., ../hacked) by parsing safely
-        resolved = folder_path.resolve()
-        if not str(resolved).startswith(str(CONTENT_DIR.resolve())):
+        if not _is_inside_content_dir(folder_path):
             return jsonify({"error": "invalid category name"}), 400
     except Exception:
         return jsonify({"error": "invalid category name"}), 400

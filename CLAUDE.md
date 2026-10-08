@@ -40,7 +40,7 @@ content/
 - `nginx/Dockerfile` — minimal nginx:alpine image, non-root user
 - `generator/generate.py` — directory walker + Jinja2 renderer + watchdog watcher
 - `generator/templates/index.html.j2` — index page template (no external deps)
-- `generator/requirements.txt` — watchdog, jinja2 (keep minimal)
+- `generator/requirements.txt` — watchdog, jinja2, flask, waitress (keep minimal); test-only deps in `requirements-dev.txt`
 - `oauth2-proxy/sign_in.html` — branded OIDC sign-in page (Go template)
 
 ## Content Rules

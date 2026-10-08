@@ -418,6 +418,16 @@ docker compose logs -f
 docker compose build && docker compose up -d
 ```
 
+### Tests and CI
+
+Every pull request runs `.github/workflows/ci.yml`: the Python tests, shellcheck and `docker compose config` on every overlay, both image builds, an `nginx -t` check of each auth mode, and a smoke test of the running stack. The last two are plain scripts you can run locally after building:
+
+```bash
+docker compose build
+sh .github/scripts/check-nginx-modes.sh rorydavidson/easy-static-hoster-nginx:latest
+sh .github/scripts/smoke-test.sh
+```
+
 ---
 
 ## Project structure

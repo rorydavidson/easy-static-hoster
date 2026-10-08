@@ -11,9 +11,11 @@ import time
 import logging
 import argparse
 import threading
+import urllib.request
 from datetime import datetime
 from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import quote
 
 from jinja2 import Environment, FileSystemLoader
 from watchdog.observers.polling import PollingObserver
@@ -62,7 +64,8 @@ def extract_title(path: Path) -> str | None:
     """Return the text content of the first <title> tag, or None."""
     try:
         # Only read the first 4 KB — the <title> is always in <head>
-        content = path.read_bytes()[:4096].decode("utf-8", errors="ignore")
+        with path.open("rb") as f:
+            content = f.read(4096).decode("utf-8", errors="ignore")
         parser = _TitleParser()
         parser.feed(content)
         return parser.title
@@ -83,10 +86,53 @@ def load_shortlinks(content_dir: Path) -> dict:
     if not path.exists():
         return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        links = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         log.warning("Could not parse shortlinks.json: %s", exc)
         return {}
+    if not isinstance(links, dict):
+        return {}
+    return {k: v for k, v in links.items() if isinstance(v, str)}
+
+
+# ── OIDC logout ───────────────────────────────────────────────────────────────
+
+_end_session_endpoints: dict[str, str] = {}
+
+
+def discover_end_session_endpoint(issuer_url: str) -> str:
+    """Return the provider's RP-initiated logout URL, or "" if unavailable.
+
+    Read from the issuer's discovery document because the path differs per
+    provider (Keycloak, Azure AD and Google all disagree). Only successes are
+    cached, so a provider that was down at startup is retried on later rebuilds.
+    """
+    if issuer_url in _end_session_endpoints:
+        return _end_session_endpoints[issuer_url]
+    try:
+        with urllib.request.urlopen(
+            f"{issuer_url}/.well-known/openid-configuration", timeout=3
+        ) as resp:
+            endpoint = json.load(resp).get("end_session_endpoint", "")
+    except Exception as exc:
+        log.warning("OIDC discovery failed, sign-out will be local only: %s", exc)
+        return ""
+    if not isinstance(endpoint, str) or not endpoint.startswith(("https://", "http://")):
+        endpoint = ""
+    _end_session_endpoints[issuer_url] = endpoint
+    return endpoint
+
+
+def oidc_logout_url() -> str:
+    issuer_url = os.environ.get("OIDC_ISSUER_URL", "").strip().rstrip("/")
+    if not issuer_url:
+        return ""
+    endpoint = discover_end_session_endpoint(issuer_url)
+    if not endpoint:
+        return ""
+    client_id = os.environ.get("OIDC_CLIENT_ID", "").strip()
+    separator = "&" if "?" in endpoint else "?"
+    return f"{endpoint}{separator}client_id={quote(client_id, safe='')}"
 
 
 # ── Index builder ─────────────────────────────────────────────────────────────
@@ -99,7 +145,8 @@ def build_context(content_dir: Path, site_title: str) -> dict:
     categories = []
 
     for folder in sorted(content_dir.iterdir()):
-        if not folder.is_dir():
+        # Dot-dirs (.git, editor caches) are never served by nginx anyway
+        if not folder.is_dir() or folder.name.startswith("."):
             continue
 
         # Optional per-category metadata
@@ -174,9 +221,8 @@ def build_context(content_dir: Path, site_title: str) -> dict:
         ),
         "header_color": os.environ.get("HEADER_COLOR", "").strip(),
         "open_new_tab": os.environ.get("OPEN_NEW_TAB", "true").strip().lower() != "false",
-        # OIDC vars — used to build the provider logout URL in the template
-        "oidc_issuer_url": os.environ.get("OIDC_ISSUER_URL", "").strip().rstrip("/"),
-        "oidc_client_id": os.environ.get("OIDC_CLIENT_ID", "").strip(),
+        # Provider logout URL for federated sign-out; "" means local sign-out only
+        "oidc_logout_url": oidc_logout_url(),
     }
 
 
@@ -219,6 +265,13 @@ class ContentHandler(FileSystemEventHandler):
         self._lock = threading.Lock()
 
     def on_any_event(self, event) -> None:
+        # A directory's mtime changes whenever an entry is added, removed or
+        # renamed in it, and those changes arrive as their own events. Writing
+        # the index (temp file + rename) touches the content root, so reacting
+        # here would rebuild in an endless loop.
+        if event.is_directory and event.event_type == "modified":
+            return
+
         # Ignore events triggered by writing index.html itself
         paths = {str(event.src_path), str(getattr(event, "dest_path", "") or "")}
         if paths - {""} <= self._own_outputs:
