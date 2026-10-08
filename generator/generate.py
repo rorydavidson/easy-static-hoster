@@ -30,6 +30,8 @@ log = logging.getLogger(__name__)
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 INDEX_FILENAME = "index.html"
+# Dot-prefixed so nginx refuses to serve it and the index never lists it
+INDEX_TMP_FILENAME = ".index.html.tmp"
 HTML_SUFFIX = ".html"
 
 
@@ -186,8 +188,10 @@ def render_index(content_dir: Path, site_title: str) -> None:
     template = env.get_template("index.html.j2")
     context = build_context(content_dir, site_title)
     output = template.render(**context)
-    index_path = content_dir / INDEX_FILENAME
-    index_path.write_text(output, encoding="utf-8")
+    # Write then rename so nginx never serves a half-written index
+    tmp_path = content_dir / INDEX_TMP_FILENAME
+    tmp_path.write_text(output, encoding="utf-8")
+    os.replace(tmp_path, content_dir / INDEX_FILENAME)
     log.info(
         "Index rebuilt — %d categor%s, %d page%s",
         len(context["categories"]),
@@ -200,22 +204,34 @@ def render_index(content_dir: Path, site_title: str) -> None:
 # ── File watcher ──────────────────────────────────────────────────────────────
 
 class ContentHandler(FileSystemEventHandler):
+    # Rebuild this long after the last event, so a burst of changes (an rsync,
+    # an upload plus its rename) produces one rebuild that sees all of them
+    debounce_seconds = 1.0
+
     def __init__(self, content_dir: Path, site_title: str) -> None:
         self.content_dir = content_dir
         self.site_title = site_title
-        self._last_rebuild = 0.0
+        self._own_outputs = {
+            str(content_dir / INDEX_FILENAME),
+            str(content_dir / INDEX_TMP_FILENAME),
+        }
+        self._timer: threading.Timer | None = None
+        self._lock = threading.Lock()
 
     def on_any_event(self, event) -> None:
         # Ignore events triggered by writing index.html itself
-        if INDEX_FILENAME in str(event.src_path):
+        paths = {str(event.src_path), str(getattr(event, "dest_path", "") or "")}
+        if paths - {""} <= self._own_outputs:
             return
 
-        # Debounce: at most one rebuild per second
-        now = time.monotonic()
-        if now - self._last_rebuild < 1.0:
-            return
-        self._last_rebuild = now
+        with self._lock:
+            if self._timer is not None:
+                self._timer.cancel()
+            self._timer = threading.Timer(self.debounce_seconds, self._rebuild)
+            self._timer.daemon = True
+            self._timer.start()
 
+    def _rebuild(self) -> None:
         try:
             render_index(self.content_dir, self.site_title)
         except Exception as exc:
