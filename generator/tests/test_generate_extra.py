@@ -1,7 +1,7 @@
 import os
 import time
 import pytest
-from watchdog.events import FileModifiedEvent, FileMovedEvent
+from watchdog.events import DirCreatedEvent, DirModifiedEvent, FileModifiedEvent, FileMovedEvent
 import generate
 
 def test_load_shortlinks_invalid(tmp_path):
@@ -300,3 +300,19 @@ def test_oidc_logout_url_rejects_non_http_endpoint(monkeypatch):
     monkeypatch.setattr(generate.urllib.request, "urlopen", lambda url, timeout:
                         _FakeResponse(b'{"end_session_endpoint": "javascript:alert(1)"}'))
     assert generate.oidc_logout_url() == ""
+
+
+def test_content_handler_ignores_directory_mtime_changes(tmp_path, monkeypatch):
+    """Writing the index changes the content root's mtime; that must not
+    trigger another rebuild, or the generator loops forever."""
+    content_dir, handler, called = _handler_with_spy(tmp_path, monkeypatch)
+    handler.on_any_event(DirModifiedEvent(str(content_dir)))
+    time.sleep(0.2)
+    assert not called
+
+
+def test_content_handler_rebuilds_on_new_category(tmp_path, monkeypatch):
+    content_dir, handler, called = _handler_with_spy(tmp_path, monkeypatch)
+    handler.on_any_event(DirCreatedEvent(str(content_dir / "new-category")))
+    time.sleep(0.2)
+    assert len(called) == 1

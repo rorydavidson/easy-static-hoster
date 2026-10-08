@@ -265,6 +265,13 @@ class ContentHandler(FileSystemEventHandler):
         self._lock = threading.Lock()
 
     def on_any_event(self, event) -> None:
+        # A directory's mtime changes whenever an entry is added, removed or
+        # renamed in it, and those changes arrive as their own events. Writing
+        # the index (temp file + rename) touches the content root, so reacting
+        # here would rebuild in an endless loop.
+        if event.is_directory and event.event_type == "modified":
+            return
+
         # Ignore events triggered by writing index.html itself
         paths = {str(event.src_path), str(getattr(event, "dest_path", "") or "")}
         if paths - {""} <= self._own_outputs:
