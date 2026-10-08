@@ -110,7 +110,7 @@ elif [ -n "$BASIC_AUTH" ]; then
 
     if [ "$AUTH_GLOBAL_ON" = true ]; then
         # Lock the entire site via nginx
-        printf "$AUTH_DIRECTIVES" > /etc/nginx/global_auth.conf
+        printf '%b' "$AUTH_DIRECTIVES" > /etc/nginx/global_auth.conf
         SITE_PUBLIC=false
         echo "Global auth enabled for user: $USER"
     else
