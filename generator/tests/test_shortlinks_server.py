@@ -160,3 +160,58 @@ def test_handle_shortlink_disabled_without_auth_mode(client, monkeypatch):
     monkeypatch.setattr(shortlinks_server, '_UPLOAD_ENABLED', False)
     response = client.post('/api/shortlinks', json={"path": "page.html", "code": "x"}, headers=auth_headers())
     assert response.status_code == 403
+
+
+def test_upload_to_non_ascii_folder(client):
+    from urllib.parse import quote
+    (shortlinks_server.CONTENT_DIR / "Résumés").mkdir()
+    headers = auth_headers()
+    headers.update({"X-Folder": quote("Résumés"), "X-Filename": "cv.html"})
+    response = client.post('/api/upload', data=b"<html></html>", headers=headers)
+    assert response.status_code == 200
+    assert (shortlinks_server.CONTENT_DIR / "Résumés" / "cv.html").exists()
+
+
+def test_upload_rejects_encoded_slash_in_folder(client):
+    headers = auth_headers()
+    headers.update({"X-Folder": "..%2Fetc", "X-Filename": "x.html"})
+    response = client.post('/api/upload', data=b"x", headers=headers)
+    assert response.status_code == 400
+
+
+def test_upload_rejects_symlink_to_sibling_with_shared_prefix(client, tmp_path):
+    # /content-evil starts with the string "/content" but is outside it
+    sibling = tmp_path / "content-evil"
+    sibling.mkdir()
+    (shortlinks_server.CONTENT_DIR / "link").symlink_to(sibling)
+    headers = auth_headers()
+    headers.update({"X-Folder": "link", "X-Filename": "x.html"})
+    response = client.post('/api/upload', data=b"x", headers=headers)
+    assert response.status_code == 400
+    assert not (sibling / "x.html").exists()
+
+
+def test_upload_leaves_no_temp_file(client):
+    (shortlinks_server.CONTENT_DIR / "cat").mkdir()
+    headers = auth_headers()
+    headers.update({"X-Folder": "cat", "X-Filename": "page.html"})
+    client.post('/api/upload', data=b"x", headers=headers)
+    assert [p.name for p in (shortlinks_server.CONTENT_DIR / "cat").iterdir()] == ["page.html"]
+
+
+@pytest.mark.parametrize("name", ["api", "s", "OAuth2"])
+def test_mkdir_rejects_reserved_names(client, name):
+    headers = auth_headers()
+    headers["X-Folder"] = name
+    response = client.post('/api/mkdir', headers=headers)
+    assert response.status_code == 400
+    assert not (shortlinks_server.CONTENT_DIR / name).exists()
+
+
+@pytest.mark.parametrize("raw", ['["a", "b"]', '{"ok": "cat/p.html", "bad": 5}'])
+def test_shortlinks_tolerates_malformed_file(client, raw):
+    (shortlinks_server.CONTENT_DIR / "shortlinks.json").write_text(raw, encoding="utf-8")
+    response = client.post('/api/shortlinks', json={"path": "cat/q.html", "code": "q"},
+                           headers=auth_headers())
+    assert response.status_code == 200
+    assert client.get('/s/q').status_code == 302

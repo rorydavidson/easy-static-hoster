@@ -893,7 +893,7 @@
 
       var headers = {
         'Content-Type':  'application/octet-stream',
-        'X-Folder':      folder,
+        'X-Folder':      encodeURIComponent(folder),
         'X-Filename':    encodeURIComponent(filename),
       };
       if (creds) {
