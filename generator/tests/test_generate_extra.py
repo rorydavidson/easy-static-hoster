@@ -225,3 +225,18 @@ def test_page_links_are_root_relative(tmp_path, monkeypatch):
     html = (content_dir / "index.html").read_text()
     assert 'href="/javascript:alert(1)/page.html"' in html
     assert 'href="javascript:' not in html
+
+
+def test_shortlink_code_not_interpolated_into_js(tmp_path):
+    """A hand-edited shortlinks.json must not be able to inject script.
+
+    Entity escaping does not protect a JS string inside an onclick attribute,
+    because the browser decodes &#39; back to a quote before running it.
+    """
+    content_dir = _make_content_dir(tmp_path)
+    (content_dir / "shortlinks.json").write_text(
+        '{"x\');alert(1);//": "cat/page.html"}', encoding="utf-8")
+    generate.render_index(content_dir, "T")
+    html = (content_dir / "index.html").read_text(encoding="utf-8")
+    assert "copyShortlink(event, this, this.dataset.code)" in html
+    assert "alert(1);//')" not in html
