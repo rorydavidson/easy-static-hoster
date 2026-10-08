@@ -10,8 +10,8 @@ RUN rm /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/nginx.conf
 
 # Placeholder auth files (overwritten at runtime by entrypoint.sh)
-RUN touch /etc/nginx/global_auth.conf /etc/nginx/api_auth.conf /etc/nginx/oidc_auth_location.conf /etc/nginx/real_ip.conf \
-    && chown nginx:nginx /etc/nginx/global_auth.conf /etc/nginx/api_auth.conf /etc/nginx/oidc_auth_location.conf /etc/nginx/real_ip.conf
+RUN touch /etc/nginx/global_auth.conf /etc/nginx/api_auth.conf /etc/nginx/oidc_auth_location.conf /etc/nginx/real_ip.conf /etc/nginx/content_csp.conf \
+    && chown nginx:nginx /etc/nginx/global_auth.conf /etc/nginx/api_auth.conf /etc/nginx/oidc_auth_location.conf /etc/nginx/real_ip.conf /etc/nginx/content_csp.conf
 
 # Temp dirs must be writable (nginx runs workers as nginx user)
 RUN mkdir -p /tmp/client_body /tmp/proxy /tmp/fastcgi /tmp/uwsgi /tmp/scgi \

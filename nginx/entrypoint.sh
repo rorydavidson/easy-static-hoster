@@ -13,6 +13,17 @@ set -e
 
 # TRUSTED_PROXIES: comma- or space-separated CIDRs of reverse proxies allowed
 # to set X-Forwarded-For. Leave empty when clients connect to nginx directly.
+# "auto" trusts only the Docker networks this container is attached to, i.e.
+# the proxy in front of it. Trusting every private range would also trust
+# LAN clients, who could then fake their IP to dodge the rate limits.
+if [ "$TRUSTED_PROXIES" = "auto" ]; then
+    TRUSTED_PROXIES=""
+    for addr in $(ip -o -f inet addr show | awk '$2 != "lo" {print $4}'); do
+        network=$(ipcalc -n "$addr" | cut -d= -f2)
+        TRUSTED_PROXIES="$TRUSTED_PROXIES $network/${addr#*/}"
+    done
+    echo "Trusting X-Forwarded-For from Docker networks:$TRUSTED_PROXIES"
+fi
 : > /etc/nginx/real_ip.conf
 if [ -n "$TRUSTED_PROXIES" ]; then
     for cidr in $(echo "$TRUSTED_PROXIES" | tr ',' ' '); do
@@ -35,6 +46,9 @@ proxy_set_header X-Forwarded-Email "";
 EOF
 echo "" > /etc/nginx/oidc_auth_location.conf
 
+# Whether anonymous visitors can load hosted pages; decides the content sandbox below.
+SITE_PUBLIC=true
+
 # OIDC mode: oauth2-proxy handles auth; skip Basic Auth setup entirely.
 if [ -n "$OIDC_ISSUER_URL" ]; then
     if [ -n "$BASIC_AUTH" ]; then
@@ -42,6 +56,7 @@ if [ -n "$OIDC_ISSUER_URL" ]; then
         exit 1
     fi
     echo "" > /etc/nginx/global_auth.conf
+    SITE_PUBLIC=false
 
     # Every /api/ request is checked against oauth2-proxy, and the user
     # identity comes from its answer. This fails closed: if oauth2-proxy is
@@ -89,6 +104,7 @@ elif [ -n "$BASIC_AUTH" ]; then
     if [ -n "$AUTH_GLOBAL" ]; then
         # Lock the entire site via nginx
         printf "$AUTH_DIRECTIVES" > /etc/nginx/global_auth.conf
+        SITE_PUBLIC=false
         echo "Global auth enabled for user: $USER"
     else
         # Site is public; upload credentials are validated per-request in the generator
@@ -98,6 +114,21 @@ elif [ -n "$BASIC_AUTH" ]; then
 else
     # No credentials — global auth include is empty, upload endpoint disabled
     echo "" > /etc/nginx/global_auth.conf
+fi
+
+# Hosted pages are arbitrary HTML served from the same origin as the index
+# and the API. A CSP sandbox gives each one an opaque origin, so its scripts
+# cannot read the index (where Basic Auth credentials are typed) or call the
+# API. The catch: browsers send no cookies with a sandboxed page's own image,
+# CSS and script requests, and do not reliably send cached Basic Auth either,
+# so behind OIDC or AUTH_GLOBAL every asset would fail. The sandbox is
+# therefore only applied when the site is public.
+CONTENT_CSP="sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads allow-pointer-lock allow-presentation"
+if [ "$SITE_PUBLIC" = true ] && [ "$CONTENT_SANDBOX" != "false" ]; then
+    echo "default \"$CONTENT_CSP\";" > /etc/nginx/content_csp.conf
+    echo "Hosted pages are sandboxed (set CONTENT_SANDBOX=false to disable)"
+else
+    echo 'default "";' > /etc/nginx/content_csp.conf
 fi
 
 exec nginx -g "daemon off;"

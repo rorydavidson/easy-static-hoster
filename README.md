@@ -178,7 +178,8 @@ cp .env.example .env
 | `PORT`         | `8080`        | Host port to expose                                |
 | `BASIC_AUTH`   | *(unset)*     | Credentials for upload — set to `username:password`. Also enables the upload and new-category buttons. |
 | `AUTH_GLOBAL`  | *(unset)*     | Set to `true` to lock the **entire site** with the same credentials (requires `BASIC_AUTH`). |
-| `TRUSTED_PROXIES` | *(unset)*  | Comma-separated CIDRs of reverse proxies allowed to set the client IP via `X-Forwarded-For`. Leave unset when nginx is exposed directly. The OIDC and nginx-proxy overlays default it to the private Docker ranges. |
+| `CONTENT_SANDBOX` | `true`     | On public sites, hosted pages are served with a `Content-Security-Policy: sandbox` header so their scripts cannot touch the index or the upload API. Set to `false` if a page needs `fetch()` of its own files, `localStorage`, or iframes of other hosted pages. Not applied with OIDC or `AUTH_GLOBAL` (see Security). |
+| `TRUSTED_PROXIES` | *(unset)*  | Comma-separated CIDRs of reverse proxies allowed to set the client IP via `X-Forwarded-For`. Leave unset when nginx is exposed directly. `auto` trusts only the Docker networks nginx is attached to. The nginx-proxy overlay defaults to `auto`; the OIDC overlay defaults to the private ranges. |
 
 **OIDC variables** (used with `docker-compose.oidc.yml` — mutually exclusive with `BASIC_AUTH`):
 
@@ -263,7 +264,7 @@ Add a `meta.json` file to any folder to control how it appears on the index:
 |----------|----------------------|----------------------------------------------|
 | `title`  | humanized folder name| Display name shown on the index              |
 | `order`  | `999`                | Sort order (lower numbers appear first)      |
-| `hidden` | `false`              | Set to `true` to hide the category entirely  |
+| `hidden` | `false`              | Set to `true` to hide the category from the index. Its files are still served to anyone with the URL, so this is not access control. |
 
 ---
 
@@ -271,9 +272,10 @@ Add a `meta.json` file to any folder to control how it appears on the index:
 
 - Security headers on all responses (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`)
 - Content-Security-Policy on the generated index page (blocks external scripts and requests to other hosts)
-- Rate limiting (20 req/s per real client IP, burst 40)
+- **Hosted page sandbox** (public sites only): hosted HTML runs on the same origin as the index and the upload API, so a hostile or compromised page could otherwise read credentials typed into the index or call the API. A CSP `sandbox` gives each page an opaque origin instead. Scripts, forms, popups and downloads still work; what breaks is `fetch()`/XHR of the page's own data files, `localStorage`/cookies, and iframes of other hosted pages. Set `CONTENT_SANDBOX=false` if you rely on those. The sandbox is skipped behind OIDC or `AUTH_GLOBAL`, because browsers send no session cookie with a sandboxed page's own images, CSS and scripts, so they would fail to load. In those modes anything you host can act with the viewer's session, so only host pages from people you trust.
+- Rate limiting: 5 req/s per real client IP (burst 20), and 10 req/min (burst 10) on `/api/` to slow password guessing
 - No directory listing — the generated index is the only navigation
-- `meta.json` files are blocked from being served directly
+- `meta.json`, `shortlinks.json` and temporary upload files are blocked from being served directly
 - Nginx version not disclosed in headers or error pages
 - Both containers run as non-root users
 - **Upload auth (Basic Auth)**: credentials validated server-side on every request via `Authorization: Basic` header — the browser never issues a `WWW-Authenticate` challenge so credentials are never cached
@@ -322,7 +324,7 @@ docker compose -f docker-compose.yml -f docker-compose.nginx-proxy.yml up -d --b
 
 - **Short link redirects** issue relative `Location` headers (`/presentations/file.html`), so the browser resolves them against the public URL — no changes needed.
 - **The copy-to-clipboard button** uses `window.location.origin` (browser-side), which already knows the public scheme and hostname — no changes needed.
-- **Rate limiting** uses the real client IP via `X-Forwarded-For` — not the proxy's container IP. The overlay sets `TRUSTED_PROXIES` to the private Docker ranges so nginx accepts that header from nginx-proxy; override it in `.env` if your proxy lives elsewhere.
+- **Rate limiting** uses the real client IP via `X-Forwarded-For` — not the proxy's container IP. The overlay sets `TRUSTED_PROXIES=auto`, so nginx accepts that header only from the Docker networks it is attached to (where nginx-proxy lives), not from LAN clients; override it in `.env` if your proxy lives elsewhere.
 
 > **Note:** The `PORT` host-port mapping stays active even when behind nginx-proxy (nginx-proxy routes via the Docker network, not the published port). Set `PORT=127.0.0.1:8080` in `.env` to restrict direct access to localhost only. This matters because the published port may present clients with a private Docker gateway IP, which `TRUSTED_PROXIES` trusts.
 

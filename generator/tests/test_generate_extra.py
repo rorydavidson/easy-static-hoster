@@ -1,6 +1,7 @@
 import os
+import time
 import pytest
-from watchdog.events import FileModifiedEvent
+from watchdog.events import FileModifiedEvent, FileMovedEvent
 import generate
 
 def test_load_shortlinks_invalid(tmp_path):
@@ -19,24 +20,60 @@ def test_build_context_meta_invalid(tmp_path):
     context = generate.build_context(content_dir, "Test")
     assert context["categories"][0]["title"] == "Cat1"
 
-def test_content_handler_debounce(tmp_path, monkeypatch):
+def _handler_with_spy(tmp_path, monkeypatch):
     content_dir = tmp_path / "content"
     content_dir.mkdir()
     handler = generate.ContentHandler(content_dir, "Site")
-
+    handler.debounce_seconds = 0.05
     called = []
     monkeypatch.setattr(generate, "render_index", lambda *args: called.append(1))
+    return content_dir, handler, called
 
-    event = FileModifiedEvent(str(content_dir / "index.html"))
-    handler.on_any_event(event)
+
+def test_content_handler_ignores_own_output(tmp_path, monkeypatch):
+    content_dir, handler, called = _handler_with_spy(tmp_path, monkeypatch)
+    handler.on_any_event(FileModifiedEvent(str(content_dir / "index.html")))
+    handler.on_any_event(FileMovedEvent(str(content_dir / ".index.html.tmp"),
+                                        str(content_dir / "index.html")))
+    time.sleep(0.2)
     assert not called
 
-    event = FileModifiedEvent(str(content_dir / "other.html"))
+
+def test_content_handler_burst_rebuilds_once_after_last_event(tmp_path, monkeypatch):
+    content_dir, handler, called = _handler_with_spy(tmp_path, monkeypatch)
+    event = FileModifiedEvent(str(content_dir / "cat" / "other.html"))
     handler.on_any_event(event)
+    handler.on_any_event(event)
+    # Nothing yet: the rebuild waits for the burst to settle
+    assert not called
+    time.sleep(0.2)
     assert len(called) == 1
 
+
+def test_content_handler_does_not_drop_later_changes(tmp_path, monkeypatch):
+    """A change soon after a rebuild must still trigger another rebuild."""
+    content_dir, handler, called = _handler_with_spy(tmp_path, monkeypatch)
+    event = FileModifiedEvent(str(content_dir / "cat" / "a.html"))
     handler.on_any_event(event)
+    time.sleep(0.2)
+    handler.on_any_event(event)
+    time.sleep(0.2)
+    assert len(called) == 2
+
+
+def test_content_handler_reacts_to_pages_named_index(tmp_path, monkeypatch):
+    content_dir, handler, called = _handler_with_spy(tmp_path, monkeypatch)
+    handler.on_any_event(FileModifiedEvent(str(content_dir / "cat" / "index.html")))
+    time.sleep(0.2)
     assert len(called) == 1
+
+
+def test_render_index_leaves_no_temp_file(tmp_path):
+    content_dir = tmp_path / "content"
+    content_dir.mkdir()
+    generate.render_index(content_dir, "T")
+    assert (content_dir / "index.html").exists()
+    assert not (content_dir / ".index.html.tmp").exists()
 
 
 # ── HEADER_COLOR tests ──────────────────────────────────────────────────────

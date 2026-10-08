@@ -50,7 +50,7 @@ content/
 - **Images and assets** (`.png`, `.jpg`, `.gif`, `.svg`, `.webp`, `.ico`, `.css`, `.js`, etc.) can be placed freely inside category folders. They are served by Nginx and can be referenced from HTML files using relative paths (e.g. `<img src="logo.png">`), but they never appear as index entries.
 - **Filename humanization:** `my-report-2025.html` → "My Report 2025". Hyphens and underscores become spaces, title-cased.
 - **`_`-prefixed HTML files** (e.g. `_example.html`) are "example" placeholders: shown in the index only while no regular HTML files exist in the folder. Hidden automatically once real content is added. Still served by Nginx if linked directly.
-- **`meta.json` in a folder** (optional): `{ "title": "Custom Name", "order": 1, "hidden": false }`
+- **`meta.json` in a folder** (optional): `{ "title": "Custom Name", "order": 1, "hidden": false }`. `hidden` only removes the category from the index; its files are still served.
 - Files at the content root (other than `index.html`) are not shown in the index.
 - Subdirectories deeper than one level are ignored.
 
@@ -86,15 +86,16 @@ docker compose build && docker compose up -d
 | `OIDC_COOKIE_SECURE` | `false`        | Set `true` when behind TLS                       |
 | `OIDC_ALLOWED_GROUP` | (unset)        | Required OIDC group for access (e.g. `easyhoster-users`) |
 | `OIDC_GROUPS_CLAIM`  | `groups`       | JWT claim containing group membership list       |
-| `TRUSTED_PROXIES`    | (unset)        | CIDRs allowed to set the client IP via `X-Forwarded-For`; OIDC and nginx-proxy overlays default to RFC-1918 ranges |
+| `CONTENT_SANDBOX`    | `true`         | Set `false` to drop the hosted-page sandbox (breaks `fetch()` of own files, `localStorage`) |
+| `TRUSTED_PROXIES`    | (unset)        | CIDRs allowed to set the client IP via `X-Forwarded-For`; `auto` = Docker networks nginx is attached to (nginx-proxy overlay default); OIDC overlay defaults to RFC-1918 ranges |
 
 ## Security Posture
 
 - Nginx runs as non-root (`nginx` user, uid 101)
 - Generator runs as non-root (`appuser`, uid 1000)
 - `server_tokens off` — no version disclosure
-- Security headers on all responses: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`; `Content-Security-Policy` on the generated index only (hosted content files are arbitrary HTML and run on the same origin)
-- Rate limiting: 20 req/s per IP, burst 40
+- Security headers on all responses: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`; `Content-Security-Policy` on the generated index; on public sites hosted pages get a CSP `sandbox` (opaque origin) so their scripts cannot reach the index or the API. Skipped behind OIDC/`AUTH_GLOBAL` because sandboxed pages' subresource requests carry no session cookie
+- Rate limiting: 5 req/s per IP, burst 20; `/api/` additionally 10 req/min, burst 10 (credential brute force)
 - No directory listing — only the generated `index.html` serves as navigation
 - Only `.html` files are linked from the index; Nginx still serves any valid file path (for assets referenced by HTML files)
 - Optional Basic Auth gates the entire site with a single env var

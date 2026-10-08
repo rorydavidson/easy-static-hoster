@@ -21,6 +21,10 @@ services:
     environment:
       # Only oauth2-proxy (and any proxy in front of it) can reach nginx, so
       # the private Docker ranges can be trusted to report the client IP.
+      # Not "auto": with nginx-proxy in front, its network is not attached to
+      # nginx, and every user would share one rate-limit bucket. Requests only
+      # get here after sign-in, so the spoofing this allows is limited to
+      # authenticated users.
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
 
   # Redis stores session data server-side so the cookie stays small.
@@ -46,6 +50,7 @@ services:
       - --client-secret=${OIDC_CLIENT_SECRET:?OIDC_CLIENT_SECRET must be set}
       - --cookie-secret=${COOKIE_SECRET:?COOKIE_SECRET must be set (openssl rand -base64 24)}
       - --cookie-secure=${OIDC_COOKIE_SECURE:-false}
+      - --cookie-samesite=lax
       - --cookie-name=_easyhoster_oidc
       - --cookie-expire=8h
       - --cookie-refresh=1m

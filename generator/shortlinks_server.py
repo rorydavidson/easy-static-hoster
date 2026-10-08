@@ -9,6 +9,7 @@ POST /api/upload       → upload an HTML file to an existing category folder
 """
 
 import base64
+import hmac
 import json
 import logging
 import os
@@ -81,7 +82,8 @@ def _check_upload_auth() -> bool:
         decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
     except Exception:
         return False
-    return decoded == os.environ.get("BASIC_AUTH", "")
+    expected = os.environ.get("BASIC_AUTH", "")
+    return hmac.compare_digest(decoded.encode("utf-8"), expected.encode("utf-8"))
 
 
 @app.route('/s/', defaults={'code': ''})

@@ -27,9 +27,10 @@ services:
     environment:
       VIRTUAL_HOST: ${VIRTUAL_HOST:?VIRTUAL_HOST must be set in .env (e.g. reports.example.com)}
       VIRTUAL_PORT: 8080
-      # nginx-proxy sits on a private Docker network; trust it to report the
-      # client IP. See the README note about restricting PORT to localhost.
-      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+      # Trust only the Docker networks nginx is attached to (where nginx-proxy
+      # lives) to report the client IP. See the README note about restricting
+      # PORT to localhost.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-auto}
       # Uncomment to enable automatic TLS via acme-companion:
       # LETSENCRYPT_HOST: ${LETSENCRYPT_HOST:-}
       # LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-}

@@ -32,6 +32,7 @@ services:
       AUTH_GLOBAL: ${AUTH_GLOBAL:-}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      CONTENT_SANDBOX: ${CONTENT_SANDBOX:-}
     depends_on:
       generator:
         condition: service_healthy
