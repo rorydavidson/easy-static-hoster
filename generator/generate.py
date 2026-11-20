@@ -80,35 +80,28 @@ def humanize(stem: str) -> str:
     return stem.replace("-", " ").replace("_", " ").title()
 
 
-def load_shortlinks(content_dir: Path) -> dict:
-    """Return the code → path mapping from shortlinks.json."""
-    path = content_dir / "shortlinks.json"
-    if not path.exists():
-        return {}
-    try:
-        links = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        log.warning("Could not parse shortlinks.json: %s", exc)
-        return {}
-    if not isinstance(links, dict):
-        return {}
-    return {k: v for k, v in links.items() if isinstance(v, str)}
-
 
 # ── OIDC logout ───────────────────────────────────────────────────────────────
 
 _end_session_endpoints: dict[str, str] = {}
+# Tracks when to retry a provider that failed discovery; value is monotonic time
+_end_session_retry_after: dict[str, float] = {}
+_END_SESSION_RETRY_INTERVAL = 60.0  # seconds between retries after a failure
 
 
 def discover_end_session_endpoint(issuer_url: str) -> str:
     """Return the provider's RP-initiated logout URL, or "" if unavailable.
 
-    Read from the issuer's discovery document because the path differs per
-    provider (Keycloak, Azure AD and Google all disagree). Only successes are
-    cached, so a provider that was down at startup is retried on later rebuilds.
+    Successful results (including "" for providers with no end_session_endpoint)
+    are cached permanently for the process lifetime. Failed requests are retried
+    after _END_SESSION_RETRY_INTERVAL seconds so a temporarily unreachable
+    provider does not block the rebuild thread on every file change.
     """
     if issuer_url in _end_session_endpoints:
         return _end_session_endpoints[issuer_url]
+    # Back off if we recently failed rather than blocking on every rebuild
+    if time.monotonic() < _end_session_retry_after.get(issuer_url, 0.0):
+        return ""
     try:
         with urllib.request.urlopen(
             f"{issuer_url}/.well-known/openid-configuration", timeout=3
@@ -116,6 +109,7 @@ def discover_end_session_endpoint(issuer_url: str) -> str:
             endpoint = json.load(resp).get("end_session_endpoint", "")
     except Exception as exc:
         log.warning("OIDC discovery failed, sign-out will be local only: %s", exc)
+        _end_session_retry_after[issuer_url] = time.monotonic() + _END_SESSION_RETRY_INTERVAL
         return ""
     if not isinstance(endpoint, str) or not endpoint.startswith(("https://", "http://")):
         endpoint = ""
@@ -131,6 +125,8 @@ def oidc_logout_url() -> str:
     if not endpoint:
         return ""
     client_id = os.environ.get("OIDC_CLIENT_ID", "").strip()
+    if not client_id:
+        return endpoint
     separator = "&" if "?" in endpoint else "?"
     return f"{endpoint}{separator}client_id={quote(client_id, safe='')}"
 
@@ -139,7 +135,7 @@ def oidc_logout_url() -> str:
 
 def build_context(content_dir: Path, site_title: str) -> dict:
     # Build reverse map: file path (relative) → short code
-    shortlinks = load_shortlinks(content_dir)
+    shortlinks = shortlinks_server.load_shortlinks(content_dir)
     path_to_code: dict[str, str] = {v.lstrip("/"): k for k, v in shortlinks.items()}
 
     categories = []
@@ -332,6 +328,10 @@ def main() -> None:
             name="shortlinks-server",
         )
         t.start()
+
+    # Warm the OIDC logout URL cache before the watcher starts so the first
+    # rebuild doesn't block the timer thread on a live HTTP request.
+    oidc_logout_url()
 
     render_index(content_dir, args.title)
 

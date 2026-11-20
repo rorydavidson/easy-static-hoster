@@ -31,6 +31,12 @@ UPLOAD_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 # OIDC mode: oauth2-proxy handles authentication; uploads trust forwarded headers.
 _OIDC_MODE = bool(os.environ.get("OIDC_ISSUER_URL", "").strip())
 
+# Optional shared secret nginx sets on internal API requests. When set, only
+# requests that carry the matching header (injected by nginx, not reachable from
+# outside the container) are accepted in OIDC mode — prevents any other container
+# on the Docker network from spoofing X-Forwarded-User to bypass auth.
+_GENERATOR_TOKEN = os.environ.get("GENERATOR_TOKEN", "").strip()
+
 # Upload is active when either Basic Auth or OIDC is configured.
 _UPLOAD_ENABLED = _OIDC_MODE or bool(os.environ.get("BASIC_AUTH", "").strip())
 
@@ -56,8 +62,8 @@ app = Flask(__name__)
 def _is_inside_content_dir(path: Path) -> bool:
     return path.resolve().is_relative_to(CONTENT_DIR.resolve())
 
-def load_shortlinks() -> dict:
-    path = CONTENT_DIR / "shortlinks.json"
+def load_shortlinks(content_dir: Path | None = None) -> dict:
+    path = (content_dir or CONTENT_DIR) / "shortlinks.json"
     if not path.exists():
         return {}
     try:
@@ -87,6 +93,10 @@ def _check_upload_auth() -> bool:
     In Basic Auth mode, the Authorization header is checked as before.
     """
     if _OIDC_MODE:
+        if _GENERATOR_TOKEN:
+            token = request.headers.get("X-Generator-Token", "")
+            if not hmac.compare_digest(token.encode("utf-8"), _GENERATOR_TOKEN.encode("utf-8")):
+                return False
         return bool(
             request.headers.get("X-Forwarded-User")
             or request.headers.get("X-Forwarded-Email")

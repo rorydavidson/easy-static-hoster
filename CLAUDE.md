@@ -88,6 +88,7 @@ docker compose build && docker compose up -d
 | `OIDC_GROUPS_CLAIM`  | `groups`       | JWT claim containing group membership list       |
 | `CONTENT_SANDBOX`    | `true`         | Set `false` to drop the hosted-page sandbox (breaks `fetch()` of own files, `localStorage`) |
 | `TRUSTED_PROXIES`    | (unset)        | CIDRs allowed to set the client IP via `X-Forwarded-For`; `auto` = Docker networks nginx is attached to (nginx-proxy overlay default); OIDC overlay defaults to RFC-1918 ranges |
+| `GENERATOR_TOKEN`    | (unset)        | OIDC mode only: shared secret nginx injects as `X-Generator-Token` on internal API calls; generator rejects requests missing it, preventing other Docker-network containers spoofing `X-Forwarded-User` |
 
 ## Security Posture
 
