@@ -3,12 +3,13 @@ import time
 import pytest
 from watchdog.events import DirCreatedEvent, DirModifiedEvent, FileModifiedEvent, FileMovedEvent
 import generate
+import shortlinks_server
 
 def test_load_shortlinks_invalid(tmp_path):
     content_dir = tmp_path / "content"
     content_dir.mkdir()
     (content_dir / "shortlinks.json").write_text("{invalid")
-    assert generate.load_shortlinks(content_dir) == {}
+    assert shortlinks_server.load_shortlinks(content_dir) == {}
 
 def test_build_context_meta_invalid(tmp_path):
     content_dir = tmp_path / "content"
