@@ -78,6 +78,7 @@ jobs:
         with:
           context: generator
           load: true
+          pull: true
           tags: rorydavidson/easy-static-hoster-generator:latest
           cache-from: type=gha,scope=generator
           cache-to: type=gha,mode=max,scope=generator
@@ -87,6 +88,7 @@ jobs:
         with:
           context: nginx
           load: true
+          pull: true
           tags: rorydavidson/easy-static-hoster-nginx:latest
           cache-from: type=gha,scope=nginx
           cache-to: type=gha,mode=max,scope=nginx

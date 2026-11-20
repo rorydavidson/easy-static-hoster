@@ -31,7 +31,7 @@ services:
   # Without this, users with many OIDC groups exceed the 4KB cookie
   # limit and authentication fails behind reverse proxies.
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.6-alpine
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
