@@ -69,6 +69,12 @@ auth_request_set $auth_email $upstream_http_x_auth_request_email;
 proxy_set_header X-Forwarded-User  $auth_user;
 proxy_set_header X-Forwarded-Email $auth_email;
 EOF
+    # Shared secret so the generator can reject requests that bypass nginx.
+    # Optional: only written when GENERATOR_TOKEN is set.
+    if [ -n "$GENERATOR_TOKEN" ]; then
+        printf 'proxy_set_header X-Generator-Token "%s";\n' "$GENERATOR_TOKEN" \
+            >> /etc/nginx/api_auth.conf
+    fi
 
     # The upstream is resolved per request (Docker's DNS) rather than at
     # startup, because oauth2-proxy starts after nginx.
